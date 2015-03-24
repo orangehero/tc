@@ -1,6 +1,7 @@
 package com.keba.tracecompass.jitter.ui;
 
 import java.util.ArrayList;
+
 import org.eclipse.jface.viewers.ArrayContentProvider;
 import org.eclipse.jface.viewers.ColumnLabelProvider;
 import org.eclipse.jface.viewers.TableViewer;
@@ -19,8 +20,10 @@ import org.eclipse.tracecompass.tmf.core.signal.TmfTraceClosedSignal;
 import org.eclipse.tracecompass.tmf.core.signal.TmfTraceOpenedSignal;
 import org.eclipse.tracecompass.tmf.core.signal.TmfTraceSelectedSignal;
 import org.eclipse.tracecompass.tmf.core.timestamp.ITmfTimestamp;
+import org.eclipse.tracecompass.tmf.core.timestamp.TmfTimeRange;
 import org.eclipse.tracecompass.tmf.core.trace.ITmfContext;
 import org.eclipse.tracecompass.tmf.core.trace.ITmfTrace;
+import org.eclipse.tracecompass.tmf.core.trace.TmfTraceContext;
 import org.eclipse.tracecompass.tmf.core.trace.TmfTraceManager;
 import org.eclipse.tracecompass.tmf.core.trace.TmfTraceUtils;
 import org.eclipse.tracecompass.tmf.ui.views.TmfView;
@@ -137,8 +140,6 @@ public class TaskPropertiesView extends TmfView {
 		ltp.clear();
 		final long beginTime = signal.getBeginTime()
 				.normalize(0, ITmfTimestamp.NANOSECOND_SCALE).getValue();
-		/*final long endTime = signal.getEndTime()
-				.normalize(0, ITmfTimestamp.NANOSECOND_SCALE).getValue();*/
 
 		for (ITmfTrace trace : TmfTraceManager.getTraceSet(currentTrace)) {
 
@@ -150,14 +151,16 @@ public class TaskPropertiesView extends TmfView {
 				continue;
 
 			ITmfContext ctx = trace.seekEvent(signal.getBeginTime());
-			if (ctx!=null) {
+			if (ctx != null) {
 				ITmfEvent event = trace.getNext(ctx);
-				Object cpuObj = TmfTraceUtils.resolveEventAspectOfClassForEvent(trace, TmfCpuAspect.class, event);
-		        if (cpuObj != null) {
-		        	eventCpu = (Integer) cpuObj;
-		        }
+				Object cpuObj = TmfTraceUtils
+						.resolveEventAspectOfClassForEvent(trace,
+								TmfCpuAspect.class, event);
+				if (cpuObj != null) {
+					eventCpu = (Integer) cpuObj;
+				}
 			}
-	        
+
 			for (int cpuNr = 0; cpuNr < 32; cpuNr++) {
 				Integer threadId = KernelThreadInformationProvider
 						.getThreadOnCpu(kernelAnalysis, cpuNr, beginTime);
@@ -166,10 +169,10 @@ public class TaskPropertiesView extends TmfView {
 							.getExecutableName(kernelAnalysis, threadId);
 					Integer threadPrio = KernelThreadInformationProvider
 							.getThreadPrio(kernelAnalysis, threadId, beginTime);
-					
-					if (eventCpu!=null && eventCpu.equals(cpuNr)) {
-						ltp.add(new TaskProperties("==> Current Thread <==", threadId
-								.toString()));
+
+					if (eventCpu != null && eventCpu.equals(cpuNr)) {
+						ltp.add(new TaskProperties("==> Current Thread <==",
+								threadId.toString()));
 					} else {
 						ltp.add(new TaskProperties("Current Thread", threadId
 								.toString()));
@@ -179,15 +182,33 @@ public class TaskPropertiesView extends TmfView {
 					ltp.add(new TaskProperties("  Current ThreadName",
 							threadName));
 
-					ltp.add(new TaskProperties("  Current Prio",
-							Long.toString(threadPrio)));
-					
+					ltp.add(new TaskProperties("  Current Prio", Long
+							.toString(threadPrio)));
 
 					ltp.add(new TaskProperties("", ""));
 
 				}
 			}
 		}
+
+		TmfTraceManager traceManager = TmfTraceManager.getInstance();
+		TmfTraceContext traceContext = traceManager.getCurrentTraceContext();
+		TmfTimeRange winRange = traceContext.getWindowRange();
+		TmfTimeRange selRange = traceContext.getSelectionRange();
+
+		long beginTS = selRange.getStartTime().getValue();
+		long endTS = selRange.getEndTime().getValue();
+		
+		ITmfTimestamp deltaTS;
+
+		/* no selection, take window range */
+		if (beginTS == endTS) {
+			deltaTS = winRange.getEndTime().getDelta(winRange.getStartTime());
+		} else {
+			deltaTS = selRange.getEndTime().getDelta(selRange.getStartTime());
+		}
+
+		ltp.add(new TaskProperties("Time range", deltaTS.toString()));
 
 		Display.getDefault().asyncExec(new InputForTableViewer());
 	}

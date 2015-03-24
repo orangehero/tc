@@ -1,0 +1,13 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Ui
+Bundle-SymbolicName: com.keba.tracecompass.jitter.ui;singleton:=true
+Bundle-Version: 1.0.0.qualifier
+Bundle-Activator: com.keba.tracecompass.jitter.ui.Activator
+Require-Bundle: org.eclipse.ui,
+ org.eclipse.core.runtime,
+ org.eclipse.tracecompass.tmf.core;bundle-version="0.1.0",
+ org.eclipse.tracecompass.tmf.ui;bundle-version="0.1.0",
+ org.swtchart;bundle-version="0.7.0"
+Bundle-RequiredExecutionEnvironment: JavaSE-1.7
+Bundle-ActivationPolicy: lazy

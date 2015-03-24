@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+   <extension
+         point="org.eclipse.ui.views">
+      <view
+            category="org.eclipse.tracecompass.sample.ui.category"
+            class="com.keba.tracecompass.jitter.ui.SystemJitterView"
+            id="org.eclipse.tracecompass.sample.ui.view1"
+            name="Jitter Viewer"
+            restorable="true">
+      </view>
+      <category
+            id="org.eclipse.tracecompass.sample.ui.category"
+            name="KEBA Tracing">
+      </category>
+   </extension>
+
+</plugin>

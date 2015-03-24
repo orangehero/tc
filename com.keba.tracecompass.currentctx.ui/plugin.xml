@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+   <extension
+         point="org.eclipse.ui.views">
+      <category
+            id="com.keba.tracecompass.category"
+            name="KEBA Tracing">
+      </category>
+      <view
+            category="com.keba.tracecompass.category"
+            class="com.keba.tracecompass.jitter.ui.TaskPropertiesView"
+            id="com.keba.tracecompass.jitter.ui.taskpropsview"
+            name="Task Properties"
+            restorable="true">
+      </view>
+   </extension>
+
+</plugin>

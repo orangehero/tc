@@ -3,12 +3,8 @@
 <plugin>
    <extension
          point="org.eclipse.ui.views">
-      <category
-            id="com.keba.tracecompass.category"
-            name="KEBA Tracing">
-      </category>
       <view
-            category="com.keba.tracecompass.category"
+            category="org.eclipse.linuxtools.lttng2.ui.views.category"
             class="com.keba.tracecompass.jitter.ui.TaskPropertiesView"
             id="com.keba.tracecompass.jitter.ui.taskpropsview"
             name="Task Properties"

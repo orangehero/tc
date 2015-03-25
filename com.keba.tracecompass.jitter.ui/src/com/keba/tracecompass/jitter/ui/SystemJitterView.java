@@ -155,14 +155,15 @@ public class SystemJitterView extends TmfView {
         item2.setControl(treeViewer.getControl());
         tabs.setSelection(item1);
         
+        jitnode = new JitterRootNode();
+        jitnode.createNewJitterDiagram("UOS.Intr-Task Jitter");
+        
         TmfTraceManager traceManager = TmfTraceManager.getInstance();
         ITmfTrace trace = traceManager.getActiveTrace();
+        
         if (trace != null) {
             traceSelected(new TmfTraceSelectedSignal(this, trace));
         }
-        
-        jitnode = new JitterRootNode();
-        jitnode.createNewJitterDiagram("UOS.Intr-Task Jitter");
 	}
 
 	@Override

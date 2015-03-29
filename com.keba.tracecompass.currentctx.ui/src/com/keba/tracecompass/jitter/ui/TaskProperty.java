@@ -1,11 +1,11 @@
 package com.keba.tracecompass.jitter.ui;
 
-public class TaskProperties {
+public class TaskProperty {
 	
 	private String property;
 	private String value;
 	
-	public TaskProperties(String prop, String val) {
+	public TaskProperty(String prop, String val) {
 		property = prop;
 		value = val;
 	}

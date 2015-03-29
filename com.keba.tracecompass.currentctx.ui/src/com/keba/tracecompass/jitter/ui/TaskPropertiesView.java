@@ -14,11 +14,12 @@ import org.eclipse.tracecompass.analysis.os.linux.core.kernelanalysis.KernelAnal
 import org.eclipse.tracecompass.analysis.os.linux.core.kernelanalysis.KernelThreadInformationProvider;
 import org.eclipse.tracecompass.tmf.core.event.ITmfEvent;
 import org.eclipse.tracecompass.tmf.core.event.aspect.TmfCpuAspect;
+import org.eclipse.tracecompass.tmf.core.signal.TmfSelectionRangeUpdatedSignal;
 import org.eclipse.tracecompass.tmf.core.signal.TmfSignalHandler;
-import org.eclipse.tracecompass.tmf.core.signal.TmfTimeSynchSignal;
 import org.eclipse.tracecompass.tmf.core.signal.TmfTraceClosedSignal;
 import org.eclipse.tracecompass.tmf.core.signal.TmfTraceOpenedSignal;
 import org.eclipse.tracecompass.tmf.core.signal.TmfTraceSelectedSignal;
+import org.eclipse.tracecompass.tmf.core.signal.TmfWindowRangeUpdatedSignal;
 import org.eclipse.tracecompass.tmf.core.timestamp.ITmfTimestamp;
 import org.eclipse.tracecompass.tmf.core.timestamp.TmfTimeRange;
 import org.eclipse.tracecompass.tmf.core.trace.ITmfContext;
@@ -33,18 +34,18 @@ public class TaskPropertiesView extends TmfView {
 	private final class InputForTableViewer implements Runnable {
 		@Override
 		public void run() {
-			tableviewer.setInput(ltp.toArray());
+			tableviewer.setInput(tpp.getContent());
 		}
 	}
 
 	private static final String VIEW_ID = "Current Task Properties";
 	private ITmfTrace currentTrace;
 	private TableViewer tableviewer;
-	private ArrayList<TaskProperties> ltp;
+	private TaskPropertiesProvider tpp;
 
 	public TaskPropertiesView() {
 		super(VIEW_ID);
-		ltp = new ArrayList<TaskProperties>();
+		tpp = new TaskPropertiesProvider();
 	}
 
 	/*
@@ -65,8 +66,8 @@ public class TaskPropertiesView extends TmfView {
 		colProperty.setLabelProvider(new ColumnLabelProvider() {
 			@Override
 			public String getText(Object element) {
-				if (element instanceof TaskProperties) {
-					TaskProperties p = (TaskProperties) element;
+				if (element instanceof TaskProperty) {
+					TaskProperty p = (TaskProperty) element;
 					return p.getProperty();
 				}
 				return "unknown";
@@ -81,8 +82,8 @@ public class TaskPropertiesView extends TmfView {
 		valProperty.setLabelProvider(new ColumnLabelProvider() {
 			@Override
 			public String getText(Object element) {
-				if (element instanceof TaskProperties) {
-					TaskProperties p = (TaskProperties) element;
+				if (element instanceof TaskProperty) {
+					TaskProperty p = (TaskProperty) element;
 					return p.getValue();
 				}
 				return "unknown";
@@ -114,7 +115,7 @@ public class TaskPropertiesView extends TmfView {
 	public void traceClosed(final TmfTraceClosedSignal signal) {
 		currentTrace = null;
 		/* clear current entries */
-		ltp.clear();
+		tpp.clearall();
 		Display.getDefault().asyncExec(new InputForTableViewer());
 	}
 
@@ -127,19 +128,36 @@ public class TaskPropertiesView extends TmfView {
 			currentTrace = signal.getTrace();
 		}
 
-		ltp.clear();
+		tpp.clearall();
 		Display.getDefault().asyncExec(new InputForTableViewer());
 	}
 
+	@TmfSignalHandler 
+	public void displayWindowRange(TmfWindowRangeUpdatedSignal signal) {
+		if (signal.getSource() == this || currentTrace == null) {
+			return;
+		}
+		
+		tpp.clearCategory("Window Range");
+		ITmfTimestamp beginTS = signal.getCurrentRange().getStartTime();
+		ITmfTimestamp endTS = signal.getCurrentRange().getStartTime();
+		
+		tpp.addProperty("Window Range", new TaskProperty("Window Range", beginTS.toString() + " .. " + endTS.toString()));
+		
+		Display.getDefault().asyncExec(new InputForTableViewer());
+	}
+	
 	@TmfSignalHandler
-	public void synchToTime(final TmfTimeSynchSignal signal) {
+	public void displayTaskInfo(final TmfSelectionRangeUpdatedSignal signal) {
 		if (signal.getSource() == this || currentTrace == null) {
 			return;
 		}
 
-		ltp.clear();
-		final long beginTime = signal.getBeginTime()
-				.normalize(0, ITmfTimestamp.NANOSECOND_SCALE).getValue();
+		tpp.clearCategory("Time Range");
+		tpp.clearCategory("Tasks");
+		
+		final ITmfTimestamp beginTS = signal.getBeginTime();
+		final ITmfTimestamp endTS = signal.getEndTime();
 
 		for (ITmfTrace trace : TmfTraceManager.getTraceSet(currentTrace)) {
 
@@ -160,6 +178,8 @@ public class TaskPropertiesView extends TmfView {
 					eventCpu = (Integer) cpuObj;
 				}
 			}
+			
+			final long beginTime = beginTS.normalize(0, ITmfTimestamp.NANOSECOND_SCALE).getValue();
 
 			for (int cpuNr = 0; cpuNr < 32; cpuNr++) {
 				Integer threadId = KernelThreadInformationProvider
@@ -171,44 +191,33 @@ public class TaskPropertiesView extends TmfView {
 							.getThreadPrio(kernelAnalysis, threadId, beginTime);
 
 					if (eventCpu != null && eventCpu.equals(cpuNr)) {
-						ltp.add(new TaskProperties("==> Current Thread <==",
+						tpp.addProperty("Tasks", new TaskProperty("==> Current Thread <==",
 								threadId.toString()));
 					} else {
-						ltp.add(new TaskProperties("Current Thread", threadId
+						tpp.addProperty("Tasks", new TaskProperty("Current Thread", threadId
 								.toString()));
 					}
-					ltp.add(new TaskProperties("  Current CPU", Integer
+					tpp.addProperty("Tasks", new TaskProperty("  Current CPU", Integer
 							.toString(cpuNr)));
-					ltp.add(new TaskProperties("  Current ThreadName",
+					tpp.addProperty("Tasks", new TaskProperty("  Current ThreadName",
 							threadName));
 
-					ltp.add(new TaskProperties("  Current Prio", Long
+					tpp.addProperty("Tasks", new TaskProperty("  Current Prio", Long
 							.toString(threadPrio)));
 
-					ltp.add(new TaskProperties("", ""));
+					tpp.addProperty("Tasks", new TaskProperty("", ""));
 
 				}
 			}
 		}
-
-		TmfTraceManager traceManager = TmfTraceManager.getInstance();
-		TmfTraceContext traceContext = traceManager.getCurrentTraceContext();
-		TmfTimeRange winRange = traceContext.getWindowRange();
-		TmfTimeRange selRange = traceContext.getSelectionRange();
-
-		long beginTS = selRange.getStartTime().getValue();
-		long endTS = selRange.getEndTime().getValue();
 		
-		ITmfTimestamp deltaTS;
-
-		/* no selection, take window range */
-		if (beginTS == endTS) {
-			deltaTS = winRange.getEndTime().getDelta(winRange.getStartTime());
+		TaskProperty tp = null;
+		if (beginTS.equals(endTS)) {
+			tp = new TaskProperty("Time stamp", beginTS.toString());
 		} else {
-			deltaTS = selRange.getEndTime().getDelta(selRange.getStartTime());
+			tp = new TaskProperty("Time range", endTS.getDelta(beginTS).toString());
 		}
-
-		ltp.add(new TaskProperties("Time range", deltaTS.toString()));
+		tpp.addProperty("Time Range", tp);
 
 		Display.getDefault().asyncExec(new InputForTableViewer());
 	}

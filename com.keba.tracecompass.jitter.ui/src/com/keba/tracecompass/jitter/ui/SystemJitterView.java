@@ -20,9 +20,10 @@ import org.eclipse.tracecompass.tmf.core.event.ITmfEventField;
 import org.eclipse.tracecompass.tmf.core.event.TmfEvent;
 import org.eclipse.tracecompass.tmf.core.request.ITmfEventRequest;
 import org.eclipse.tracecompass.tmf.core.request.TmfEventRequest;
+import org.eclipse.tracecompass.tmf.core.signal.TmfSelectionRangeUpdatedSignal;
 import org.eclipse.tracecompass.tmf.core.signal.TmfSignalHandler;
 import org.eclipse.tracecompass.tmf.core.signal.TmfSignalThrottler;
-import org.eclipse.tracecompass.tmf.core.signal.TmfTimeSynchSignal;
+import org.eclipse.tracecompass.tmf.core.signal.TmfStartSynchSignal;
 import org.eclipse.tracecompass.tmf.core.signal.TmfTimestampFormatUpdateSignal;
 import org.eclipse.tracecompass.tmf.core.signal.TmfTraceClosedSignal;
 import org.eclipse.tracecompass.tmf.core.signal.TmfTraceSelectedSignal;
@@ -98,7 +99,7 @@ public class SystemJitterView extends TmfView {
 					JitterIntervalNode jin = (JitterIntervalNode)o;
 					TmfTimestamp beginTs = new TmfTimestamp((long) jin.getStartTs(), ITmfTimestamp.NANOSECOND_SCALE);
 			        TmfTimestamp endTs = new TmfTimestamp((long) jin.getEndTs(), ITmfTimestamp.NANOSECOND_SCALE);
-			        TmfTimeSynchSignal signal = new TmfTimeSynchSignal(this, beginTs, endTs);
+			        TmfSelectionRangeUpdatedSignal signal = new TmfSelectionRangeUpdatedSignal(this, beginTs, endTs);
 			        throttler.queue(signal);
 				}
 			}

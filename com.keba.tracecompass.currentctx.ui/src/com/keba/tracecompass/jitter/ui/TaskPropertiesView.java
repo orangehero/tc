@@ -1,6 +1,8 @@
 package com.keba.tracecompass.jitter.ui;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 
 import org.eclipse.jface.viewers.ArrayContentProvider;
 import org.eclipse.jface.viewers.ColumnLabelProvider;
@@ -10,8 +12,14 @@ import org.eclipse.swt.SWT;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Table;
+import org.eclipse.tracecompass.analysis.os.linux.core.kernelanalysis.Attributes;
 import org.eclipse.tracecompass.analysis.os.linux.core.kernelanalysis.KernelAnalysis;
 import org.eclipse.tracecompass.analysis.os.linux.core.kernelanalysis.KernelThreadInformationProvider;
+import org.eclipse.tracecompass.statesystem.core.ITmfStateSystem;
+import org.eclipse.tracecompass.statesystem.core.StateSystemUtils;
+import org.eclipse.tracecompass.statesystem.core.exceptions.AttributeNotFoundException;
+import org.eclipse.tracecompass.statesystem.core.exceptions.StateSystemDisposedException;
+import org.eclipse.tracecompass.statesystem.core.interval.ITmfStateInterval;
 import org.eclipse.tracecompass.tmf.core.event.ITmfEvent;
 import org.eclipse.tracecompass.tmf.core.event.aspect.TmfCpuAspect;
 import org.eclipse.tracecompass.tmf.core.signal.TmfSelectionRangeUpdatedSignal;
@@ -133,22 +141,22 @@ public class TaskPropertiesView extends TmfView {
 	}
 
 	@TmfSignalHandler 
-	public void displayWindowRange(TmfWindowRangeUpdatedSignal signal) {
+	public void catchWindowTimeRange(TmfWindowRangeUpdatedSignal signal) {
 		if (signal.getSource() == this || currentTrace == null) {
 			return;
 		}
 		
 		tpp.clearCategory("Window Range");
 		ITmfTimestamp beginTS = signal.getCurrentRange().getStartTime();
-		ITmfTimestamp endTS = signal.getCurrentRange().getStartTime();
+		ITmfTimestamp endTS = signal.getCurrentRange().getEndTime();
 		
-		tpp.addProperty("Window Range", new TaskProperty("Window Range", beginTS.toString() + " .. " + endTS.toString()));
+		tpp.addProperty("Window Range", new TaskProperty("Window Range", endTS.getDelta(beginTS).toString()));
 		
 		Display.getDefault().asyncExec(new InputForTableViewer());
 	}
 	
 	@TmfSignalHandler
-	public void displayTaskInfo(final TmfSelectionRangeUpdatedSignal signal) {
+	public void catchSelectionTimeRange(final TmfSelectionRangeUpdatedSignal signal) {
 		if (signal.getSource() == this || currentTrace == null) {
 			return;
 		}
@@ -181,34 +189,46 @@ public class TaskPropertiesView extends TmfView {
 			
 			final long beginTime = beginTS.normalize(0, ITmfTimestamp.NANOSECOND_SCALE).getValue();
 
-			for (int cpuNr = 0; cpuNr < 32; cpuNr++) {
-				Integer threadId = KernelThreadInformationProvider
-						.getThreadOnCpu(kernelAnalysis, cpuNr, beginTime);
-				if (threadId != null) {
-					String threadName = KernelThreadInformationProvider
-							.getExecutableName(kernelAnalysis, threadId);
+			ITmfStateSystem ssq = kernelAnalysis.getStateSystem();
+			try {
+				
+				int cpusQuark = ssq.getQuarkAbsolute(Attributes.CPUS);
+	            List<Integer> cpuQuarks = ssq.getSubAttributes(cpusQuark, false);
+	            for (Integer cpuQuark : cpuQuarks) {
+	            	int threadQuark = ssq.getQuarkRelative(cpuQuark, Attributes.CURRENT_THREAD);
+					ITmfStateInterval ival = ssq.querySingleState(beginTS.getValue(), threadQuark);
+					if (ival.getStateValue().isNull()) {
+						continue;
+					}
+					
+					int threadId = ival.getStateValue().unboxInt();
+					String threadName;
+					if (threadId==0) {
+						threadName = "idle";
+					} else {
+						threadName = KernelThreadInformationProvider
+								.getExecutableName(kernelAnalysis, threadId);
+					}
+					String cpuName = ssq.getAttributeName(cpuQuark);
 					Integer threadPrio = KernelThreadInformationProvider
 							.getThreadPrio(kernelAnalysis, threadId, beginTime);
-
-					if (eventCpu != null && eventCpu.equals(cpuNr)) {
-						tpp.addProperty("Tasks", new TaskProperty("==> Current Thread <==",
-								threadId.toString()));
+					if (eventCpu != null && eventCpu.toString().equals(cpuName)) {
+						tpp.addProperty("Tasks", new TaskProperty("==> Thread Name <==", threadName));
 					} else {
-						tpp.addProperty("Tasks", new TaskProperty("Current Thread", threadId
-								.toString()));
+						tpp.addProperty("Tasks", new TaskProperty("  Thread Name", threadName));
 					}
-					tpp.addProperty("Tasks", new TaskProperty("  Current CPU", Integer
-							.toString(cpuNr)));
-					tpp.addProperty("Tasks", new TaskProperty("  Current ThreadName",
-							threadName));
-
-					tpp.addProperty("Tasks", new TaskProperty("  Current Prio", Long
+					tpp.addProperty("Tasks", new TaskProperty("  Thread Id", Integer.toString(threadId)));
+					tpp.addProperty("Tasks", new TaskProperty("  CPU", cpuName));
+					tpp.addProperty("Tasks", new TaskProperty("  Prio", Long
 							.toString(threadPrio)));
 
 					tpp.addProperty("Tasks", new TaskProperty("", ""));
-
+					
 				}
+			} catch (AttributeNotFoundException | StateSystemDisposedException e) {
+				// do nothing
 			}
+			
 		}
 		
 		TaskProperty tp = null;

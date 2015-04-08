@@ -2,28 +2,60 @@ package com.keba.tracecompass.jitter.ui;
 
 import java.text.FieldPosition;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.Iterator;
+import java.util.List;
 
+import org.eclipse.jface.action.Action;
+import org.eclipse.jface.action.IToolBarManager;
+import org.eclipse.jface.resource.ImageDescriptor;
+import org.eclipse.jface.viewers.ArrayContentProvider;
 import org.eclipse.jface.viewers.ColumnLabelProvider;
 import org.eclipse.jface.viewers.DoubleClickEvent;
 import org.eclipse.jface.viewers.IDoubleClickListener;
+import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.IStructuredSelection;
+import org.eclipse.jface.viewers.StructuredSelection;
+import org.eclipse.jface.viewers.TableViewer;
+import org.eclipse.jface.viewers.TableViewerColumn;
 import org.eclipse.jface.viewers.TreeViewer;
 import org.eclipse.jface.viewers.TreeViewerColumn;
+import org.eclipse.jface.window.Window;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.CTabFolder;
 import org.eclipse.swt.custom.CTabItem;
+import org.eclipse.swt.custom.ScrolledComposite;
+import org.eclipse.swt.events.MouseAdapter;
+import org.eclipse.swt.events.MouseEvent;
+import org.eclipse.swt.events.MouseListener;
+import org.eclipse.swt.events.PaintEvent;
+import org.eclipse.swt.events.PaintListener;
+import org.eclipse.swt.graphics.Color;
+import org.eclipse.swt.graphics.GC;
+import org.eclipse.swt.graphics.Image;
+import org.eclipse.swt.graphics.Point;
+import org.eclipse.swt.graphics.Rectangle;
+import org.eclipse.swt.layout.GridData;
+import org.eclipse.swt.layout.GridLayout;
+import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Event;
+import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.Listener;
+import org.eclipse.swt.widgets.Shell;
+import org.eclipse.swt.widgets.TableItem;
 import org.eclipse.tracecompass.tmf.core.event.ITmfEvent;
 import org.eclipse.tracecompass.tmf.core.event.ITmfEventField;
 import org.eclipse.tracecompass.tmf.core.event.TmfEvent;
+import org.eclipse.tracecompass.tmf.core.filter.ITmfFilter;
+import org.eclipse.tracecompass.tmf.core.filter.model.ITmfFilterTreeNode;
 import org.eclipse.tracecompass.tmf.core.request.ITmfEventRequest;
 import org.eclipse.tracecompass.tmf.core.request.TmfEventRequest;
 import org.eclipse.tracecompass.tmf.core.signal.TmfSelectionRangeUpdatedSignal;
 import org.eclipse.tracecompass.tmf.core.signal.TmfSignalHandler;
 import org.eclipse.tracecompass.tmf.core.signal.TmfSignalThrottler;
-import org.eclipse.tracecompass.tmf.core.signal.TmfStartSynchSignal;
 import org.eclipse.tracecompass.tmf.core.signal.TmfTimestampFormatUpdateSignal;
 import org.eclipse.tracecompass.tmf.core.signal.TmfTraceClosedSignal;
 import org.eclipse.tracecompass.tmf.core.signal.TmfTraceSelectedSignal;
@@ -33,24 +65,57 @@ import org.eclipse.tracecompass.tmf.core.timestamp.TmfTimestamp;
 import org.eclipse.tracecompass.tmf.core.trace.ITmfTrace;
 import org.eclipse.tracecompass.tmf.core.trace.TmfTraceManager;
 import org.eclipse.tracecompass.tmf.ui.views.TmfView;
+import org.eclipse.tracecompass.tmf.ui.views.filter.FilterDialog;
+import org.eclipse.ui.IActionBars;
+import org.eclipse.ui.plugin.AbstractUIPlugin;
 import org.swtchart.Chart;
 import org.swtchart.ISeries.SeriesType;
 import org.swtchart.Range;
 
 public class SystemJitterView extends TmfView {
 
+	private static final String PLUGIN_ID = "com.keba.tracecompass.jitter.ui";
+	private static final String VIEW_ID = "com.keba.tracecompass.jitter.ui.view";
+	
+	private static final Image ADD_IMAGE = AbstractUIPlugin.imageDescriptorFromPlugin(PLUGIN_ID, "/icons/add_button.gif").createImage();
+	private static final Image DELETE_IMAGE = AbstractUIPlugin.imageDescriptorFromPlugin(PLUGIN_ID, "/icons/delete_button.gif").createImage();
+	private static final Image EXPORT_IMAGE = AbstractUIPlugin.imageDescriptorFromPlugin(PLUGIN_ID, "/icons/export_button.gif").createImage();
+	private static final Image IMPORT_IMAGE = AbstractUIPlugin.imageDescriptorFromPlugin(PLUGIN_ID, "/icons/import_button.gif").createImage();
+	
     private static final String SERIES_NAME = "Series";
     private static final String Y_AXIS_TITLE = "Frequency";
     private static final String X_AXIS_TITLE = "Jitter";
-    private static final String VIEW_ID = "com.keba.tracecompass.jitter.ui.view";
+    
+    private Shell shell;
     private Chart chart;
-    private TreeViewer treeViewer;
+    private TreeViewer intervalTreeViewer;
+    private TableViewer tableViewer;
     private CTabFolder tabs;
     private ITmfTrace currentTrace;
     private JitterRootNode jitnode;
     private TmfSignalThrottler throttler;
+
+    private Action addFilterAction;
+    private Action deleteFilterAction;
+    private Action importFilterAction;
+    private Action exportFilterAction;
+    
+    private List<IntervalSetting> intervalSettings;
 	
-    public class TmfChartTimeStampFormat extends SimpleDateFormat {
+    private class IntervalSetting {
+    	
+    	public ITmfFilterTreeNode beginFilter;
+    	public ITmfFilterTreeNode endFilter;
+    	public String name;
+    	
+    	public IntervalSetting() {
+    		name = "";
+    		beginFilter = null;
+    		endFilter = null;
+    	}
+    }
+    
+    private class TmfChartTimeStampFormat extends SimpleDateFormat {
         private static final long serialVersionUID = 1L;
         @Override
         public StringBuffer format(Date date, StringBuffer toAppendTo, FieldPosition fieldPosition) {
@@ -60,37 +125,59 @@ public class SystemJitterView extends TmfView {
         }
     }
     
+    private class AddFilterAction extends Action {
+    	@Override
+    	public void run() {
+    		intervalSettings.add(new IntervalSetting());
+    		tableViewer.setInput(intervalSettings.toArray());
+    	}
+    };
+    
+    private class DeleteFilterAction extends Action {
+    	@Override
+    	public void run() {
+    		StructuredSelection sel = (StructuredSelection)tableViewer.getSelection();
+    		Iterator it = sel.iterator(); 
+    		while (it.hasNext()) {
+    			intervalSettings.remove(it.next());
+    		}
+    		tableViewer.setInput(intervalSettings.toArray());
+    	}
+    };
+    
+    private class ImportFilterAction extends Action {
+    	@Override
+    	public void run() {
+    		
+    	}
+    };
+    
+    private class ExportFilterAction extends Action {
+    	@Override
+    	public void run() {
+    		
+    	}
+    };
+    
 	public SystemJitterView(String viewName) {
 		super(viewName);
 		throttler = new TmfSignalThrottler(this, 200);
+		intervalSettings = new ArrayList<>();
 	}	
 	
 	public SystemJitterView() {
 		super(VIEW_ID);
 		throttler = new TmfSignalThrottler(this, 200);
+		intervalSettings = new ArrayList<>();
 	}
-
-	@Override
-	public void createPartControl(Composite parent) {
-		tabs = new CTabFolder(parent, SWT.BORDER);
-		CTabItem item1 = new CTabItem(tabs,  SWT.BORDER);
-		item1.setText("System Jitter Graph");
-		CTabItem item2 = new CTabItem(tabs,  SWT.BORDER);
-		item2.setText("Jitter Bookmarks");
-		
-		chart = new Chart(tabs, SWT.BORDER);
-        chart.getTitle().setVisible(false);
-        chart.getAxisSet().getXAxis(0).getTitle().setText(X_AXIS_TITLE);
-        chart.getAxisSet().getYAxis(0).getTitle().setText(Y_AXIS_TITLE);
-        chart.getAxisSet().getXAxis(0).getTick().setFormat(new TmfChartTimeStampFormat());
-        chart.getSeriesSet().createSeries(SeriesType.LINE, SERIES_NAME);
-        chart.getLegend().setVisible(false);
-        
-        treeViewer = new TreeViewer(tabs, SWT.BORDER | SWT.H_SCROLL | SWT.V_SCROLL | SWT.FULL_SELECTION);
-        treeViewer.setContentProvider(new SystemJitterTreeContentProvider());
-        treeViewer.getTree().setHeaderVisible(true);
-        treeViewer.setUseHashlookup(true);
-        treeViewer.addDoubleClickListener(new IDoubleClickListener() {
+	
+	/* create the tree of intervals. */
+	private void createIntervalTreeViewer() {
+		intervalTreeViewer = new TreeViewer(tabs, SWT.BORDER | SWT.H_SCROLL | SWT.V_SCROLL | SWT.FULL_SELECTION);
+        intervalTreeViewer.setContentProvider(new SystemJitterTreeContentProvider());
+        intervalTreeViewer.getTree().setHeaderVisible(true);
+        intervalTreeViewer.setUseHashlookup(true);
+        intervalTreeViewer.addDoubleClickListener(new IDoubleClickListener() {
 			@Override
 			public void doubleClick(DoubleClickEvent event) {
 				IStructuredSelection sel = (IStructuredSelection) event.getSelection();
@@ -105,7 +192,7 @@ public class SystemJitterView extends TmfView {
 			}
 		});
         
-        final TreeViewerColumn treeColumn1 = new TreeViewerColumn(treeViewer, 0);
+        final TreeViewerColumn treeColumn1 = new TreeViewerColumn(intervalTreeViewer, 0);
         treeColumn1.getColumn().setText("Name");
         treeColumn1.getColumn().setWidth(200);
         treeColumn1.getColumn().setToolTipText("Tooltip");
@@ -121,7 +208,7 @@ public class SystemJitterView extends TmfView {
         	}
         });
         
-        final TreeViewerColumn treeColumn2 = new TreeViewerColumn(treeViewer, 0);
+        final TreeViewerColumn treeColumn2 = new TreeViewerColumn(intervalTreeViewer, 0);
         treeColumn2.getColumn().setText("Start Timestamp");
         treeColumn2.getColumn().setWidth(100);
         treeColumn2.getColumn().setToolTipText("Tooltip");
@@ -136,7 +223,7 @@ public class SystemJitterView extends TmfView {
         	}
         });
         
-        final TreeViewerColumn treeColumn3 = new TreeViewerColumn(treeViewer, 0);
+        final TreeViewerColumn treeColumn3 = new TreeViewerColumn(intervalTreeViewer, 0);
         treeColumn3.getColumn().setText("End Timestamp");
         treeColumn3.getColumn().setWidth(100);
         treeColumn3.getColumn().setToolTipText("Tooltip");
@@ -150,21 +237,172 @@ public class SystemJitterView extends TmfView {
         		return "";
         	}
         });
+	}
+	
+	/* Create the table of custom filters */
+	private void createFilterTable() {
+		tableViewer = new TableViewer(tabs, SWT.MULTI | SWT.H_SCROLL
+				| SWT.V_SCROLL | SWT.FULL_SELECTION | SWT.BORDER);
+		tableViewer.setContentProvider(ArrayContentProvider.getInstance());
+		tableViewer.getTable().setHeaderVisible(true);
+		tableViewer.getTable().addListener(SWT.MouseDoubleClick, new Listener() {
+			@Override
+			public void handleEvent(Event event) {
+				Point pt = new Point(event.x, event.y);
+				TableItem item = tableViewer.getTable().getItem(pt);
+				if (item != null) {
+					Object o = item.getData();
+					if (o instanceof IntervalSetting) {
+						IntervalSetting ival = (IntervalSetting)o;
+						int index = 0;
+						Rectangle rect0 = item.getBounds(index);
+						if (rect0.contains(pt)) {
+							// handle name of filter(s)
+						}
+						index = 1;
+						Rectangle rect1 = item.getBounds(index);
+						if (rect1.contains(pt)) {
+							FilterDialog dialog = new FilterDialog(shell);
+							dialog.setFilter(ival.beginFilter);
+				            dialog.open();
+				            if (dialog.getReturnCode() == Window.OK) {
+				            	ival.beginFilter = dialog.getFilter();
+				            	if (ival.beginFilter != null) {
+				            		item.setText(index, ival.beginFilter.toString());
+				            	}
+				            }
+						}
+						index = 2;
+						Rectangle rect2 = item.getBounds(index);
+						if (rect2.contains(pt)) {
+							FilterDialog dialog = new FilterDialog(shell);
+							dialog.setFilter(ival.endFilter);
+				            dialog.open();
+				            if (dialog.getReturnCode() == Window.OK) {
+				            	ival.endFilter = dialog.getFilter();
+				            	if (ival.endFilter != null) {
+				            		item.setText(index, ival.endFilter.toString());
+				            	}
+				            }
+						}
+					}
+				}
+			}
+			
+		});
+
+		TableViewerColumn colName = new TableViewerColumn(tableViewer, SWT.NONE);
+		colName.getColumn().setWidth(200);
+		colName.getColumn().setText("Name");
+		colName.setLabelProvider(new ColumnLabelProvider() {
+			@Override
+			public String getText(Object element) {
+				if (element != null && element instanceof IntervalSetting) {
+					IntervalSetting ival = (IntervalSetting)element;
+					return (ival.name == null || ival.name.equals("")) ? "Set name ..." : ival.name;
+				} 
+				
+				return "";
+			}
+		});
+		
+		TableViewerColumn colBeginFilter = new TableViewerColumn(tableViewer, SWT.NONE);
+		colBeginFilter.getColumn().setWidth(200);
+		colBeginFilter.getColumn().setText("Filter begin event");
+		colBeginFilter.setLabelProvider(new ColumnLabelProvider() {
+			@Override
+			public String getText(Object element) {
+				if (element != null && element instanceof IntervalSetting) {
+					IntervalSetting ival = (IntervalSetting)element;
+					return (ival.beginFilter == null) ? "No filter set." : ival.beginFilter.toString();
+				} 
+				
+				return "";
+			}
+		});
+		
+		TableViewerColumn colEndFilter = new TableViewerColumn(tableViewer, SWT.NONE);
+		colEndFilter.getColumn().setWidth(200);
+		colEndFilter.getColumn().setText("Filter end event");
+		colEndFilter.setLabelProvider(new ColumnLabelProvider() {
+			@Override
+			public String getText(Object element) {
+				if (element != null && element instanceof IntervalSetting) {
+					IntervalSetting ival = (IntervalSetting)element;
+					return (ival.endFilter == null) ? "No filter set." : ival.beginFilter.toString();
+				} 
+				
+				return "";
+			}
+		});
+	}
+
+	@Override
+	public void createPartControl(Composite parent) {
+		shell = parent.getShell();
+		
+		tabs = new CTabFolder(parent, SWT.BORDER);
+		CTabItem item1 = new CTabItem(tabs,  SWT.BORDER);
+		item1.setText("System Jitter Graph");
+		CTabItem item2 = new CTabItem(tabs,  SWT.BORDER);
+		item2.setText("Jitter Bookmarks");
+		CTabItem item3 = new CTabItem(tabs,  SWT.BORDER);
+		item3.setText("Filter");
+		
+		chart = new Chart(tabs, SWT.BORDER);
+        chart.getTitle().setVisible(false);
+        chart.getAxisSet().getXAxis(0).getTitle().setText(X_AXIS_TITLE);
+        chart.getAxisSet().getYAxis(0).getTitle().setText(Y_AXIS_TITLE);
+        chart.getAxisSet().getXAxis(0).getTick().setFormat(new TmfChartTimeStampFormat());
+        chart.getSeriesSet().createSeries(SeriesType.LINE, SERIES_NAME);
+        chart.getLegend().setVisible(false);
         
+        createIntervalTreeViewer();
+        
+        createFilterTable();
         
         item1.setControl(chart);
-        item2.setControl(treeViewer.getControl());
+        item2.setControl(intervalTreeViewer.getControl());
+        item3.setControl(tableViewer.getControl());
         tabs.setSelection(item1);
+        
+        createActionBar();
         
         jitnode = new JitterRootNode();
         jitnode.createNewJitterDiagram("UOS.Intr-Task Jitter");
         
         TmfTraceManager traceManager = TmfTraceManager.getInstance();
         ITmfTrace trace = traceManager.getActiveTrace();
-        
+                
         if (trace != null) {
             traceSelected(new TmfTraceSelectedSignal(this, trace));
         }
+	}
+	
+	/* Create the action bar for adding, importing, exporting filters. */
+	private void createActionBar () {
+		addFilterAction = new AddFilterAction();
+        addFilterAction.setImageDescriptor(ImageDescriptor.createFromImage(ADD_IMAGE));
+        addFilterAction.setToolTipText("Add new filter");
+        
+        deleteFilterAction = new DeleteFilterAction();
+        deleteFilterAction.setImageDescriptor(ImageDescriptor.createFromImage(DELETE_IMAGE));
+        deleteFilterAction.setToolTipText("Delete filter");
+        
+        importFilterAction = new ImportFilterAction();
+        importFilterAction.setImageDescriptor(ImageDescriptor.createFromImage(IMPORT_IMAGE));
+        importFilterAction.setToolTipText("Import filters from File");
+        
+        exportFilterAction = new ExportFilterAction();
+        exportFilterAction.setImageDescriptor(ImageDescriptor.createFromImage(EXPORT_IMAGE));
+        exportFilterAction.setToolTipText("Export filters to File");
+
+        IActionBars bars = getViewSite().getActionBars();
+        IToolBarManager manager = bars.getToolBarManager();
+        manager.add(addFilterAction);
+        manager.add(deleteFilterAction);
+        manager.add(importFilterAction);
+        manager.add(exportFilterAction);
 	}
 
 	@Override
@@ -274,7 +512,7 @@ public class SystemJitterView extends TmfView {
                         
                         chart.redraw();
                         
-                        treeViewer.setInput(jitnode);
+                        intervalTreeViewer.setInput(jitnode);
                     }
 
                 });
@@ -297,7 +535,11 @@ public class SystemJitterView extends TmfView {
     	Display.getDefault().asyncExec(new Runnable() {
             @Override
             public void run() {
-            	treeViewer.setInput(null);
+            	if (intervalTreeViewer.getControl().isDisposed()) {
+            		return;
+            	}
+            	
+            	intervalTreeViewer.setInput(null);
             	
             	chart.getSeriesSet().getSeries()[0].setXSeries(new double[0]);
                 chart.getSeriesSet().getSeries()[0].setYSeries(new double[0]);

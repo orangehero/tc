@@ -42,7 +42,7 @@ public class TaskPropertiesView extends TmfView {
 	private final class InputForTableViewer implements Runnable {
 		@Override
 		public void run() {
-			tableviewer.setInput(tpp.getContent());
+			tableviewer.setInput(tpp.getPrecedenceContent/*getContent*/());
 		}
 	}
 
@@ -54,6 +54,11 @@ public class TaskPropertiesView extends TmfView {
 	public TaskPropertiesView() {
 		super(VIEW_ID);
 		tpp = new TaskPropertiesProvider();
+		tpp.addCategory("Window Range", 2);
+		tpp.addCategory("Time Range", 1);
+		tpp.addCategory("Tasks", 0);
+		
+		
 	}
 
 	/*
@@ -123,7 +128,7 @@ public class TaskPropertiesView extends TmfView {
 	public void traceClosed(final TmfTraceClosedSignal signal) {
 		currentTrace = null;
 		/* clear current entries */
-		tpp.clearall();
+		tpp.clearProperties();
 		Display.getDefault().asyncExec(new InputForTableViewer());
 	}
 
@@ -136,7 +141,7 @@ public class TaskPropertiesView extends TmfView {
 			currentTrace = signal.getTrace();
 		}
 
-		tpp.clearall();
+		tpp.clearProperties();
 		Display.getDefault().asyncExec(new InputForTableViewer());
 	}
 
@@ -146,7 +151,7 @@ public class TaskPropertiesView extends TmfView {
 			return;
 		}
 		
-		tpp.clearCategory("Window Range");
+		tpp.clearPropertiesOfCategory("Window Range");
 		ITmfTimestamp beginTS = signal.getCurrentRange().getStartTime();
 		ITmfTimestamp endTS = signal.getCurrentRange().getEndTime();
 		
@@ -161,8 +166,8 @@ public class TaskPropertiesView extends TmfView {
 			return;
 		}
 
-		tpp.clearCategory("Time Range");
-		tpp.clearCategory("Tasks");
+		tpp.clearPropertiesOfCategory("Time Range");
+		tpp.clearPropertiesOfCategory("Tasks");
 		
 		final ITmfTimestamp beginTS = signal.getBeginTime();
 		final ITmfTimestamp endTS = signal.getEndTime();

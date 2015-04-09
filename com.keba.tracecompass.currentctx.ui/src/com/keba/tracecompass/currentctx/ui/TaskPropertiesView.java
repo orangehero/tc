@@ -1,4 +1,4 @@
-package com.keba.tracecompass.jitter.ui;
+package com.keba.tracecompass.currentctx.ui;
 
 import java.util.ArrayList;
 import java.util.Collection;

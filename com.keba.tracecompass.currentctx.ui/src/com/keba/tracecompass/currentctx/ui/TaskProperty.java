@@ -1,4 +1,4 @@
-package com.keba.tracecompass.jitter.ui;
+package com.keba.tracecompass.currentctx.ui;
 
 public class TaskProperty {
 	

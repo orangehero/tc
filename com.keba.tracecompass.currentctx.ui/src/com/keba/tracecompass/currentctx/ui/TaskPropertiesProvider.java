@@ -19,6 +19,9 @@ public class TaskPropertiesProvider {
 		catPrecedences = new TreeMap<>();
 	}
 	
+	/* 
+	 * Adds a Category. Necessary prerequisite to add a property 
+	 */
 	public void addCategory(String category, int precedence) {
 		Integer isCat = catPrecedences.get(category);
 		if (isCat == null) {
@@ -28,11 +31,17 @@ public class TaskPropertiesProvider {
 		}
 	}
 	
+	/*
+	 * Clear all categories and properties.
+	 */
 	public void clearCategories() {
 		catPrecedences.clear();
 		properties.clear();
 	}
 	
+	/* 
+	 * Clear all Properties, but leave categories in place 
+	 */
 	public void clearProperties() {
 		properties.clear();
 		
@@ -42,12 +51,18 @@ public class TaskPropertiesProvider {
 		}
 	}
 	
+	/* 
+	 * Clear all Properties of a certain category.
+	 */
 	public void clearPropertiesOfCategory(String category) {
 		properties.remove(category);
 		ArrayList<TaskProperty> ltp = new ArrayList<>();
 		properties.put(category, ltp);
 	}
 	
+	/*
+	 * Get all properties sorted by their categories precedence 
+	 */
 	public Object [] getPrecedenceContent () {
 		ArrayList<TaskProperty> ltp = new ArrayList<>();
 		
@@ -71,6 +86,9 @@ public class TaskPropertiesProvider {
 		return ltp.toArray();
 	}
 	
+	/* 
+	 * Get all properties unsorted 
+	 */
 	public Object [] getContent () {
 		ArrayList<TaskProperty> ltp = new ArrayList<>();
 		for (Map.Entry<String, ArrayList<TaskProperty>> entry : properties.entrySet()) {
@@ -79,6 +97,10 @@ public class TaskPropertiesProvider {
 		return ltp.toArray();
 	}
 	
+	/*
+	 * Add a property. Every Property is part of a category. A category must be
+	 * created first with addCategory. Otherwise this method fails without further notice. 
+	 */
 	public void addProperty(String category, TaskProperty tp) {
 		ArrayList<TaskProperty> ltp = properties.get(category);
 		if (ltp != null) {

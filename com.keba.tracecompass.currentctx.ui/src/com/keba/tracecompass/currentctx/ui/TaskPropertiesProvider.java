@@ -43,21 +43,17 @@ public class TaskPropertiesProvider {
 	 * Clear all Properties, but leave categories in place 
 	 */
 	public void clearProperties() {
-		properties.clear();
-		
-		for (Map.Entry<String, Integer> entry : catPrecedences.entrySet()) {
-			ArrayList<TaskProperty> ltp = new ArrayList<>();
-			properties.put(entry.getKey(), ltp);
+		for (Map.Entry<String, ArrayList<TaskProperty>> entry : properties.entrySet()) {
+			entry.getValue().clear();
 		}
 	}
 	
 	/* 
 	 * Clear all Properties of a certain category.
 	 */
-	public void clearPropertiesOfCategory(String category) {
-		properties.remove(category);
-		ArrayList<TaskProperty> ltp = new ArrayList<>();
-		properties.put(category, ltp);
+	public void clearPropertiesOfCategory(String category) {		
+		ArrayList<TaskProperty> ltp = properties.get(category);
+		if (ltp != null) ltp.clear();
 	}
 	
 	/*

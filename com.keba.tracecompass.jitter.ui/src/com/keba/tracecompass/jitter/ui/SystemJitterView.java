@@ -11,45 +11,40 @@ import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.IToolBarManager;
 import org.eclipse.jface.resource.ImageDescriptor;
 import org.eclipse.jface.viewers.ArrayContentProvider;
+import org.eclipse.jface.viewers.CellEditor;
 import org.eclipse.jface.viewers.ColumnLabelProvider;
+import org.eclipse.jface.viewers.ColumnViewerEditor;
+import org.eclipse.jface.viewers.ColumnViewerEditorActivationEvent;
+import org.eclipse.jface.viewers.ColumnViewerEditorActivationStrategy;
 import org.eclipse.jface.viewers.DoubleClickEvent;
+import org.eclipse.jface.viewers.FocusCellOwnerDrawHighlighter;
+import org.eclipse.jface.viewers.ICellModifier;
 import org.eclipse.jface.viewers.IDoubleClickListener;
-import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.jface.viewers.StructuredSelection;
 import org.eclipse.jface.viewers.TableViewer;
 import org.eclipse.jface.viewers.TableViewerColumn;
+import org.eclipse.jface.viewers.TableViewerEditor;
+import org.eclipse.jface.viewers.TableViewerFocusCellManager;
+import org.eclipse.jface.viewers.TextCellEditor;
 import org.eclipse.jface.viewers.TreeViewer;
 import org.eclipse.jface.viewers.TreeViewerColumn;
 import org.eclipse.jface.window.Window;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.CTabFolder;
 import org.eclipse.swt.custom.CTabItem;
-import org.eclipse.swt.custom.ScrolledComposite;
-import org.eclipse.swt.events.MouseAdapter;
-import org.eclipse.swt.events.MouseEvent;
-import org.eclipse.swt.events.MouseListener;
-import org.eclipse.swt.events.PaintEvent;
-import org.eclipse.swt.events.PaintListener;
-import org.eclipse.swt.graphics.Color;
-import org.eclipse.swt.graphics.GC;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.Rectangle;
-import org.eclipse.swt.layout.GridData;
-import org.eclipse.swt.layout.GridLayout;
-import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
-import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.TableItem;
 import org.eclipse.tracecompass.tmf.core.event.ITmfEvent;
 import org.eclipse.tracecompass.tmf.core.event.ITmfEventField;
 import org.eclipse.tracecompass.tmf.core.event.TmfEvent;
-import org.eclipse.tracecompass.tmf.core.filter.ITmfFilter;
 import org.eclipse.tracecompass.tmf.core.filter.model.ITmfFilterTreeNode;
 import org.eclipse.tracecompass.tmf.core.request.ITmfEventRequest;
 import org.eclipse.tracecompass.tmf.core.request.TmfEventRequest;
@@ -86,29 +81,29 @@ public class SystemJitterView extends TmfView {
     private static final String Y_AXIS_TITLE = "Frequency";
     private static final String X_AXIS_TITLE = "Jitter";
     
-    private Shell shell;
-    private Chart chart;
-    private TreeViewer intervalTreeViewer;
-    private TableViewer tableViewer;
-    private CTabFolder tabs;
-    private ITmfTrace currentTrace;
-    private JitterRootNode jitnode;
-    private TmfSignalThrottler throttler;
+    private Shell fShell;
+    private Chart fChart;
+    private TreeViewer fIntervalTreeViewer;
+    private TableViewer fIntervalFilterTableViewer;
+    private CTabFolder fTabs;
+    private ITmfTrace fCurrentTrace;
+    private JitterRootNode fjitterNode;
+    private TmfSignalThrottler fThrottler;
 
     private Action addFilterAction;
     private Action deleteFilterAction;
     private Action importFilterAction;
     private Action exportFilterAction;
     
-    private List<IntervalSetting> intervalSettings;
+    private List<IntervalFilterSetting> fIntervalSettings;
 	
-    private class IntervalSetting {
+    private class IntervalFilterSetting {
     	
     	public ITmfFilterTreeNode beginFilter;
     	public ITmfFilterTreeNode endFilter;
     	public String name;
     	
-    	public IntervalSetting() {
+    	public IntervalFilterSetting() {
     		name = "";
     		beginFilter = null;
     		endFilter = null;
@@ -128,20 +123,20 @@ public class SystemJitterView extends TmfView {
     private class AddFilterAction extends Action {
     	@Override
     	public void run() {
-    		intervalSettings.add(new IntervalSetting());
-    		tableViewer.setInput(intervalSettings.toArray());
+    		fIntervalSettings.add(new IntervalFilterSetting());
+    		fIntervalFilterTableViewer.setInput(fIntervalSettings.toArray());
     	}
     };
     
     private class DeleteFilterAction extends Action {
     	@Override
     	public void run() {
-    		StructuredSelection sel = (StructuredSelection)tableViewer.getSelection();
-    		Iterator it = sel.iterator(); 
+    		StructuredSelection sel = (StructuredSelection)fIntervalFilterTableViewer.getSelection();
+    		Iterator<?> it = sel.iterator(); 
     		while (it.hasNext()) {
-    			intervalSettings.remove(it.next());
+    			fIntervalSettings.remove(it.next());
     		}
-    		tableViewer.setInput(intervalSettings.toArray());
+    		fIntervalFilterTableViewer.setInput(fIntervalSettings.toArray());
     	}
     };
     
@@ -159,25 +154,65 @@ public class SystemJitterView extends TmfView {
     	}
     };
     
+    private class SetEventFilterListener implements Listener {
+    	@Override
+		public void handleEvent(Event event) {
+			Point pt = new Point(event.x, event.y);
+			TableItem item = fIntervalFilterTableViewer.getTable().getItem(pt);
+			if (item != null) {
+				Object o = item.getData();
+				if (o instanceof IntervalFilterSetting) {
+					IntervalFilterSetting ival = (IntervalFilterSetting)o;
+					int index = 1;
+					Rectangle rect1 = item.getBounds(index);
+					if (rect1.contains(pt)) {
+						FilterDialog dialog = new FilterDialog(fShell);
+						dialog.setFilter(ival.beginFilter);
+			            dialog.open();
+			            if (dialog.getReturnCode() == Window.OK) {
+			            	ival.beginFilter = dialog.getFilter();
+			            	if (ival.beginFilter != null) {
+			            		item.setText(index, ival.beginFilter.toString());
+			            	}
+			            }
+					}
+					index = 2;
+					Rectangle rect2 = item.getBounds(index);
+					if (rect2.contains(pt)) {
+						FilterDialog dialog = new FilterDialog(fShell);
+						dialog.setFilter(ival.endFilter);
+			            dialog.open();
+			            if (dialog.getReturnCode() == Window.OK) {
+			            	ival.endFilter = dialog.getFilter();
+			            	if (ival.endFilter != null) {
+			            		item.setText(index, ival.endFilter.toString());
+			            	}
+			            }
+					}
+				}
+			}
+		}
+    }
+    
 	public SystemJitterView(String viewName) {
 		super(viewName);
-		throttler = new TmfSignalThrottler(this, 200);
-		intervalSettings = new ArrayList<>();
+		fThrottler = new TmfSignalThrottler(this, 200);
+		fIntervalSettings = new ArrayList<>();
 	}	
 	
 	public SystemJitterView() {
 		super(VIEW_ID);
-		throttler = new TmfSignalThrottler(this, 200);
-		intervalSettings = new ArrayList<>();
+		fThrottler = new TmfSignalThrottler(this, 200);
+		fIntervalSettings = new ArrayList<>();
 	}
 	
 	/* create the tree of intervals. */
 	private void createIntervalTreeViewer() {
-		intervalTreeViewer = new TreeViewer(tabs, SWT.BORDER | SWT.H_SCROLL | SWT.V_SCROLL | SWT.FULL_SELECTION);
-        intervalTreeViewer.setContentProvider(new SystemJitterTreeContentProvider());
-        intervalTreeViewer.getTree().setHeaderVisible(true);
-        intervalTreeViewer.setUseHashlookup(true);
-        intervalTreeViewer.addDoubleClickListener(new IDoubleClickListener() {
+		fIntervalTreeViewer = new TreeViewer(fTabs, SWT.BORDER | SWT.H_SCROLL | SWT.V_SCROLL | SWT.FULL_SELECTION);
+        fIntervalTreeViewer.setContentProvider(new SystemJitterTreeContentProvider());
+        fIntervalTreeViewer.getTree().setHeaderVisible(true);
+        fIntervalTreeViewer.setUseHashlookup(true);
+        fIntervalTreeViewer.addDoubleClickListener(new IDoubleClickListener() {
 			@Override
 			public void doubleClick(DoubleClickEvent event) {
 				IStructuredSelection sel = (IStructuredSelection) event.getSelection();
@@ -187,12 +222,12 @@ public class SystemJitterView extends TmfView {
 					TmfTimestamp beginTs = new TmfTimestamp((long) jin.getStartTs(), ITmfTimestamp.NANOSECOND_SCALE);
 			        TmfTimestamp endTs = new TmfTimestamp((long) jin.getEndTs(), ITmfTimestamp.NANOSECOND_SCALE);
 			        TmfSelectionRangeUpdatedSignal signal = new TmfSelectionRangeUpdatedSignal(this, beginTs, endTs);
-			        throttler.queue(signal);
+			        fThrottler.queue(signal);
 				}
 			}
 		});
         
-        final TreeViewerColumn treeColumn1 = new TreeViewerColumn(intervalTreeViewer, 0);
+        final TreeViewerColumn treeColumn1 = new TreeViewerColumn(fIntervalTreeViewer, 0);
         treeColumn1.getColumn().setText("Name");
         treeColumn1.getColumn().setWidth(200);
         treeColumn1.getColumn().setToolTipText("Tooltip");
@@ -208,7 +243,7 @@ public class SystemJitterView extends TmfView {
         	}
         });
         
-        final TreeViewerColumn treeColumn2 = new TreeViewerColumn(intervalTreeViewer, 0);
+        final TreeViewerColumn treeColumn2 = new TreeViewerColumn(fIntervalTreeViewer, 0);
         treeColumn2.getColumn().setText("Start Timestamp");
         treeColumn2.getColumn().setWidth(100);
         treeColumn2.getColumn().setToolTipText("Tooltip");
@@ -223,7 +258,7 @@ public class SystemJitterView extends TmfView {
         	}
         });
         
-        final TreeViewerColumn treeColumn3 = new TreeViewerColumn(intervalTreeViewer, 0);
+        final TreeViewerColumn treeColumn3 = new TreeViewerColumn(fIntervalTreeViewer, 0);
         treeColumn3.getColumn().setText("End Timestamp");
         treeColumn3.getColumn().setWidth(100);
         treeColumn3.getColumn().setToolTipText("Tooltip");
@@ -239,66 +274,61 @@ public class SystemJitterView extends TmfView {
         });
 	}
 	
-	/* Create the table of custom filters */
-	private void createFilterTable() {
-		tableViewer = new TableViewer(tabs, SWT.MULTI | SWT.H_SCROLL
+	private void createIntervalFilterTable() {
+		fIntervalFilterTableViewer = new TableViewer(fTabs, SWT.MULTI | SWT.H_SCROLL
 				| SWT.V_SCROLL | SWT.FULL_SELECTION | SWT.BORDER);
-		tableViewer.setContentProvider(ArrayContentProvider.getInstance());
-		tableViewer.getTable().setHeaderVisible(true);
-		tableViewer.getTable().addListener(SWT.MouseDoubleClick, new Listener() {
+		fIntervalFilterTableViewer.setContentProvider(ArrayContentProvider.getInstance());
+		fIntervalFilterTableViewer.getTable().setHeaderVisible(true);
+		
+		TableViewerFocusCellManager tvfcm = new TableViewerFocusCellManager(fIntervalFilterTableViewer, new FocusCellOwnerDrawHighlighter(fIntervalFilterTableViewer));
+		TableViewerEditor.create(fIntervalFilterTableViewer, tvfcm, new ColumnViewerEditorActivationStrategy(fIntervalFilterTableViewer){
+		    protected boolean isEditorActivationEvent(ColumnViewerEditorActivationEvent event) {  
+		        return event.eventType == ColumnViewerEditorActivationEvent.MOUSE_DOUBLE_CLICK_SELECTION;
+		    }
+		}, ColumnViewerEditor.DEFAULT);
+		
+		final String [] columnProperties = {"Name", "1st event filter", "2nd event filter"};
+		fIntervalFilterTableViewer.setColumnProperties(columnProperties);
+		
+		CellEditor[] editors = {new TextCellEditor(fIntervalFilterTableViewer.getTable()), null, null};
+		fIntervalFilterTableViewer.setCellEditors(editors);
+		fIntervalFilterTableViewer.setCellModifier(new ICellModifier() {
+			
 			@Override
-			public void handleEvent(Event event) {
-				Point pt = new Point(event.x, event.y);
-				TableItem item = tableViewer.getTable().getItem(pt);
-				if (item != null) {
-					Object o = item.getData();
-					if (o instanceof IntervalSetting) {
-						IntervalSetting ival = (IntervalSetting)o;
-						int index = 0;
-						Rectangle rect0 = item.getBounds(index);
-						if (rect0.contains(pt)) {
-							// handle name of filter(s)
-						}
-						index = 1;
-						Rectangle rect1 = item.getBounds(index);
-						if (rect1.contains(pt)) {
-							FilterDialog dialog = new FilterDialog(shell);
-							dialog.setFilter(ival.beginFilter);
-				            dialog.open();
-				            if (dialog.getReturnCode() == Window.OK) {
-				            	ival.beginFilter = dialog.getFilter();
-				            	if (ival.beginFilter != null) {
-				            		item.setText(index, ival.beginFilter.toString());
-				            	}
-				            }
-						}
-						index = 2;
-						Rectangle rect2 = item.getBounds(index);
-						if (rect2.contains(pt)) {
-							FilterDialog dialog = new FilterDialog(shell);
-							dialog.setFilter(ival.endFilter);
-				            dialog.open();
-				            if (dialog.getReturnCode() == Window.OK) {
-				            	ival.endFilter = dialog.getFilter();
-				            	if (ival.endFilter != null) {
-				            		item.setText(index, ival.endFilter.toString());
-				            	}
-				            }
-						}
-					}
+			public void modify(Object element, String property, Object value) {
+				if (element != null && element instanceof TableItem) {
+					IntervalFilterSetting ival = (IntervalFilterSetting)((TableItem)element).getData();
+					ival.name = (String)value;
 				}
+				fIntervalFilterTableViewer.refresh();
 			}
 			
+			@Override
+			public Object getValue(Object element, String property) {
+				if (element != null && element instanceof IntervalFilterSetting) {
+					IntervalFilterSetting ival = (IntervalFilterSetting)element;
+					return ival.name;
+				}
+				return "";
+			}
+			
+			@Override
+			public boolean canModify(Object element, String property) {
+				if (property.equals(columnProperties[0])) return true;
+				return false;
+			}
 		});
-
-		TableViewerColumn colName = new TableViewerColumn(tableViewer, SWT.NONE);
+		
+		fIntervalFilterTableViewer.getTable().addListener(SWT.MouseDoubleClick, new SetEventFilterListener());
+		
+		TableViewerColumn colName = new TableViewerColumn(fIntervalFilterTableViewer, SWT.NONE);
 		colName.getColumn().setWidth(200);
-		colName.getColumn().setText("Name");
+		colName.getColumn().setText(columnProperties[0]);
 		colName.setLabelProvider(new ColumnLabelProvider() {
 			@Override
 			public String getText(Object element) {
-				if (element != null && element instanceof IntervalSetting) {
-					IntervalSetting ival = (IntervalSetting)element;
+				if (element != null && element instanceof IntervalFilterSetting) {
+					IntervalFilterSetting ival = (IntervalFilterSetting)element;
 					return (ival.name == null || ival.name.equals("")) ? "Set name ..." : ival.name;
 				} 
 				
@@ -306,14 +336,14 @@ public class SystemJitterView extends TmfView {
 			}
 		});
 		
-		TableViewerColumn colBeginFilter = new TableViewerColumn(tableViewer, SWT.NONE);
+		TableViewerColumn colBeginFilter = new TableViewerColumn(fIntervalFilterTableViewer, SWT.NONE);
 		colBeginFilter.getColumn().setWidth(200);
-		colBeginFilter.getColumn().setText("Filter begin event");
+		colBeginFilter.getColumn().setText(columnProperties[1]);
 		colBeginFilter.setLabelProvider(new ColumnLabelProvider() {
 			@Override
 			public String getText(Object element) {
-				if (element != null && element instanceof IntervalSetting) {
-					IntervalSetting ival = (IntervalSetting)element;
+				if (element != null && element instanceof IntervalFilterSetting) {
+					IntervalFilterSetting ival = (IntervalFilterSetting)element;
 					return (ival.beginFilter == null) ? "No filter set." : ival.beginFilter.toString();
 				} 
 				
@@ -321,14 +351,14 @@ public class SystemJitterView extends TmfView {
 			}
 		});
 		
-		TableViewerColumn colEndFilter = new TableViewerColumn(tableViewer, SWT.NONE);
+		TableViewerColumn colEndFilter = new TableViewerColumn(fIntervalFilterTableViewer, SWT.NONE);
 		colEndFilter.getColumn().setWidth(200);
-		colEndFilter.getColumn().setText("Filter end event");
+		colEndFilter.getColumn().setText(columnProperties[2]);
 		colEndFilter.setLabelProvider(new ColumnLabelProvider() {
 			@Override
 			public String getText(Object element) {
-				if (element != null && element instanceof IntervalSetting) {
-					IntervalSetting ival = (IntervalSetting)element;
+				if (element != null && element instanceof IntervalFilterSetting) {
+					IntervalFilterSetting ival = (IntervalFilterSetting)element;
 					return (ival.endFilter == null) ? "No filter set." : ival.beginFilter.toString();
 				} 
 				
@@ -339,37 +369,37 @@ public class SystemJitterView extends TmfView {
 
 	@Override
 	public void createPartControl(Composite parent) {
-		shell = parent.getShell();
+		fShell = parent.getShell();
 		
-		tabs = new CTabFolder(parent, SWT.BORDER);
-		CTabItem item1 = new CTabItem(tabs,  SWT.BORDER);
+		fTabs = new CTabFolder(parent, SWT.BORDER);
+		CTabItem item1 = new CTabItem(fTabs,  SWT.BORDER);
 		item1.setText("System Jitter Graph");
-		CTabItem item2 = new CTabItem(tabs,  SWT.BORDER);
+		CTabItem item2 = new CTabItem(fTabs,  SWT.BORDER);
 		item2.setText("Jitter Bookmarks");
-		CTabItem item3 = new CTabItem(tabs,  SWT.BORDER);
+		CTabItem item3 = new CTabItem(fTabs,  SWT.BORDER);
 		item3.setText("Filter");
 		
-		chart = new Chart(tabs, SWT.BORDER);
-        chart.getTitle().setVisible(false);
-        chart.getAxisSet().getXAxis(0).getTitle().setText(X_AXIS_TITLE);
-        chart.getAxisSet().getYAxis(0).getTitle().setText(Y_AXIS_TITLE);
-        chart.getAxisSet().getXAxis(0).getTick().setFormat(new TmfChartTimeStampFormat());
-        chart.getSeriesSet().createSeries(SeriesType.LINE, SERIES_NAME);
-        chart.getLegend().setVisible(false);
+		fChart = new Chart(fTabs, SWT.BORDER);
+        fChart.getTitle().setVisible(false);
+        fChart.getAxisSet().getXAxis(0).getTitle().setText(X_AXIS_TITLE);
+        fChart.getAxisSet().getYAxis(0).getTitle().setText(Y_AXIS_TITLE);
+        fChart.getAxisSet().getXAxis(0).getTick().setFormat(new TmfChartTimeStampFormat());
+        fChart.getSeriesSet().createSeries(SeriesType.LINE, SERIES_NAME);
+        fChart.getLegend().setVisible(false);
         
         createIntervalTreeViewer();
         
-        createFilterTable();
+        createIntervalFilterTable();
         
-        item1.setControl(chart);
-        item2.setControl(intervalTreeViewer.getControl());
-        item3.setControl(tableViewer.getControl());
-        tabs.setSelection(item1);
+        item1.setControl(fChart);
+        item2.setControl(fIntervalTreeViewer.getControl());
+        item3.setControl(fIntervalFilterTableViewer.getControl());
+        fTabs.setSelection(item1);
         
         createActionBar();
         
-        jitnode = new JitterRootNode();
-        jitnode.createNewJitterDiagram("UOS.Intr-Task Jitter");
+        fjitterNode = new JitterRootNode();
+        fjitterNode.createNewJitterDiagram("UOS.Intr-Task Jitter");
         
         TmfTraceManager traceManager = TmfTraceManager.getInstance();
         ITmfTrace trace = traceManager.getActiveTrace();
@@ -407,24 +437,24 @@ public class SystemJitterView extends TmfView {
 
 	@Override
 	public void setFocus() {
-		chart.setFocus();
+		fChart.setFocus();
 	}
 	
     @TmfSignalHandler
     public void timestampFormatUpdated(TmfTimestampFormatUpdateSignal signal) {
         // Called when the time stamp preference is changed
-        chart.getAxisSet().getXAxis(0).getTick().setFormat(new TmfChartTimeStampFormat());
-        chart.redraw();
+        fChart.getAxisSet().getXAxis(0).getTick().setFormat(new TmfChartTimeStampFormat());
+        fChart.redraw();
     }
 	
     @TmfSignalHandler
     public void traceSelected(final TmfTraceSelectedSignal signal) {
         // Don't populate the view again if we're already showing this trace
-        if (currentTrace == signal.getTrace()) {
+        if (fCurrentTrace == signal.getTrace()) {
             return;
         }
-        currentTrace = signal.getTrace();
-        jitnode.cleanJitterEntries("UOS.Intr-Task Jitter");
+        fCurrentTrace = signal.getTrace();
+        fjitterNode.cleanJitterEntries("UOS.Intr-Task Jitter");
         
 
         // Create the request to get data from the trace
@@ -470,7 +500,7 @@ public class SystemJitterView extends TmfView {
                 			double ts = (double) data.getTimestamp().getValue();
                 			/* first occurrence of event ... */
                 			if (lastUosIntrTs != 0.0) {
-                				jitnode.addJitterEntry("UOS.Intr-Task Jitter", lastUosIntrTs, ts);
+                				fjitterNode.addJitterEntry("UOS.Intr-Task Jitter", lastUosIntrTs, ts);
                 			}
                 			lastUosIntrTs = ts;
                 			timerInterruptOccurred = false; /* reset timer interrupt occurrence */
@@ -486,10 +516,10 @@ public class SystemJitterView extends TmfView {
                 lastUosIntrTs = 0.0;
                 timerInterruptOccurred = false;
                 
-                final double x[] = jitnode.getXValues("UOS.Intr-Task Jitter");
-                final double y[] = jitnode.getYValues("UOS.Intr-Task Jitter");
-                minFreq = jitnode.getYMin();
-                maxFreq = jitnode.getYMax();
+                final double x[] = fjitterNode.getXValues("UOS.Intr-Task Jitter");
+                final double y[] = fjitterNode.getYValues("UOS.Intr-Task Jitter");
+                minFreq = fjitterNode.getYMin();
+                maxFreq = fjitterNode.getYMax();
 
                 // This part needs to run on the UI thread since it updates the chart SWT control
                 Display.getDefault().asyncExec(new Runnable() {
@@ -497,22 +527,22 @@ public class SystemJitterView extends TmfView {
                     @Override
                     public void run() {
 
-                        chart.getSeriesSet().getSeries()[0].setXSeries(x);
-                        chart.getSeriesSet().getSeries()[0].setYSeries(y);
+                        fChart.getSeriesSet().getSeries()[0].setXSeries(x);
+                        fChart.getSeriesSet().getSeries()[0].setYSeries(y);
 
                         // Set the new range
                         if (x.length>0 && y.length>0) {
-                            chart.getAxisSet().getXAxis(0).setRange(new Range(0, x[x.length - 1]));
-                            chart.getAxisSet().getYAxis(0).setRange(new Range(minFreq, maxFreq));
+                            fChart.getAxisSet().getXAxis(0).setRange(new Range(0, x[x.length - 1]));
+                            fChart.getAxisSet().getYAxis(0).setRange(new Range(minFreq, maxFreq));
                         } else {
-                            chart.getAxisSet().getXAxis(0).setRange(new Range(0, 1));
-                            chart.getAxisSet().getYAxis(0).setRange(new Range(0, 1));
+                            fChart.getAxisSet().getXAxis(0).setRange(new Range(0, 1));
+                            fChart.getAxisSet().getYAxis(0).setRange(new Range(0, 1));
                         }
-                        chart.getAxisSet().adjustRange();
+                        fChart.getAxisSet().adjustRange();
                         
-                        chart.redraw();
+                        fChart.redraw();
                         
-                        intervalTreeViewer.setInput(jitnode);
+                        fIntervalTreeViewer.setInput(fjitterNode);
                     }
 
                 });
@@ -535,15 +565,15 @@ public class SystemJitterView extends TmfView {
     	Display.getDefault().asyncExec(new Runnable() {
             @Override
             public void run() {
-            	if (intervalTreeViewer.getControl().isDisposed()) {
+            	if (fIntervalTreeViewer.getControl().isDisposed()) {
             		return;
             	}
             	
-            	intervalTreeViewer.setInput(null);
+            	fIntervalTreeViewer.setInput(null);
             	
-            	chart.getSeriesSet().getSeries()[0].setXSeries(new double[0]);
-                chart.getSeriesSet().getSeries()[0].setYSeries(new double[0]);
-                chart.redraw();
+            	fChart.getSeriesSet().getSeries()[0].setXSeries(new double[0]);
+                fChart.getSeriesSet().getSeries()[0].setYSeries(new double[0]);
+                fChart.redraw();
             }
     	});
     }

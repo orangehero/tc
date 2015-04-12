@@ -1,6 +1,7 @@
 package com.keba.tracecompass.jitter.ui;
 
 import java.util.HashMap;
+import java.util.Map;
 
 public class JitterRootNode {
 	
@@ -19,7 +20,11 @@ public class JitterRootNode {
 		}
 	}
 	
-	public void cleanJitterEntries(String Name) {
+	public void cleanJitterEntries() {
+		jitterDiagrams.clear();
+	}
+	
+	public void cleanJitterDiagram(String Name) {
 		JitterIntervalList il = jitterDiagrams.get(Name);
 		if (il != null) {
 			il.clear();

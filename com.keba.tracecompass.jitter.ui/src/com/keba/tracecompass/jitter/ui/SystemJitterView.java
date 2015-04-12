@@ -80,6 +80,8 @@ public class SystemJitterView extends TmfView {
     private static final String SERIES_NAME = "Series";
     private static final String Y_AXIS_TITLE = "Frequency";
     private static final String X_AXIS_TITLE = "Jitter";
+    private static final int TAB_INTERVAL_INDEX = 1;
+    private static final int TAB_FILTER_INDEX = 2;
     
     private Shell fShell;
     private Chart fChart;
@@ -87,7 +89,7 @@ public class SystemJitterView extends TmfView {
     private TableViewer fIntervalFilterTableViewer;
     private CTabFolder fTabs;
     private ITmfTrace fCurrentTrace;
-    private JitterRootNode fjitterNode;
+    private JitterRootNode fjitterNodes;
     private TmfSignalThrottler fThrottler;
 
     private Action addFilterAction;
@@ -123,6 +125,9 @@ public class SystemJitterView extends TmfView {
     private class AddFilterAction extends Action {
     	@Override
     	public void run() {
+    		if (fTabs.getSelectionIndex() != TAB_FILTER_INDEX) {
+    			return;
+    		}
     		fIntervalSettings.add(new IntervalFilterSetting());
     		fIntervalFilterTableViewer.setInput(fIntervalSettings.toArray());
     	}
@@ -131,12 +136,27 @@ public class SystemJitterView extends TmfView {
     private class DeleteFilterAction extends Action {
     	@Override
     	public void run() {
+    		if (fTabs.getSelectionIndex() != TAB_FILTER_INDEX) {
+    			return;
+    		}
+    		int selectionIndex = 0;
     		StructuredSelection sel = (StructuredSelection)fIntervalFilterTableViewer.getSelection();
     		Iterator<?> it = sel.iterator(); 
     		while (it.hasNext()) {
-    			fIntervalSettings.remove(it.next());
+    			IntervalFilterSetting ifs = (IntervalFilterSetting)it.next();
+    			selectionIndex = fIntervalSettings.indexOf(ifs);
+    			fIntervalSettings.remove(ifs);
     		}
     		fIntervalFilterTableViewer.setInput(fIntervalSettings.toArray());
+    		int iValSettingsSize = fIntervalSettings.size();
+    		if (iValSettingsSize > 0) {
+	    		if (selectionIndex >= iValSettingsSize) {
+	    			selectionIndex = iValSettingsSize - 1;
+	    		}
+				fIntervalFilterTableViewer.setSelection(new StructuredSelection(
+						fIntervalFilterTableViewer.getElementAt(selectionIndex)),
+						true);
+    		}
     	}
     };
     
@@ -163,7 +183,7 @@ public class SystemJitterView extends TmfView {
 				Object o = item.getData();
 				if (o instanceof IntervalFilterSetting) {
 					IntervalFilterSetting ival = (IntervalFilterSetting)o;
-					int index = 1;
+					int index = TAB_INTERVAL_INDEX;
 					Rectangle rect1 = item.getBounds(index);
 					if (rect1.contains(pt)) {
 						FilterDialog dialog = new FilterDialog(fShell);
@@ -176,8 +196,7 @@ public class SystemJitterView extends TmfView {
 			            	}
 			            }
 					}
-					index = 2;
-					Rectangle rect2 = item.getBounds(index);
+					Rectangle rect2 = item.getBounds(TAB_FILTER_INDEX);
 					if (rect2.contains(pt)) {
 						FilterDialog dialog = new FilterDialog(fShell);
 						dialog.setFilter(ival.endFilter);
@@ -185,7 +204,7 @@ public class SystemJitterView extends TmfView {
 			            if (dialog.getReturnCode() == Window.OK) {
 			            	ival.endFilter = dialog.getFilter();
 			            	if (ival.endFilter != null) {
-			            		item.setText(index, ival.endFilter.toString());
+			            		item.setText(TAB_FILTER_INDEX, ival.endFilter.toString());
 			            	}
 			            }
 					}
@@ -338,7 +357,7 @@ public class SystemJitterView extends TmfView {
 		
 		TableViewerColumn colBeginFilter = new TableViewerColumn(fIntervalFilterTableViewer, SWT.NONE);
 		colBeginFilter.getColumn().setWidth(200);
-		colBeginFilter.getColumn().setText(columnProperties[1]);
+		colBeginFilter.getColumn().setText(columnProperties[TAB_INTERVAL_INDEX]);
 		colBeginFilter.setLabelProvider(new ColumnLabelProvider() {
 			@Override
 			public String getText(Object element) {
@@ -353,7 +372,7 @@ public class SystemJitterView extends TmfView {
 		
 		TableViewerColumn colEndFilter = new TableViewerColumn(fIntervalFilterTableViewer, SWT.NONE);
 		colEndFilter.getColumn().setWidth(200);
-		colEndFilter.getColumn().setText(columnProperties[2]);
+		colEndFilter.getColumn().setText(columnProperties[TAB_FILTER_INDEX]);
 		colEndFilter.setLabelProvider(new ColumnLabelProvider() {
 			@Override
 			public String getText(Object element) {
@@ -366,11 +385,39 @@ public class SystemJitterView extends TmfView {
 			}
 		});
 	}
+	
+	/**
+	 * Create the action bar for adding, importing, exporting filters. 
+	 * */
+	private void createActionBar () {
+		addFilterAction = new AddFilterAction();
+        addFilterAction.setImageDescriptor(ImageDescriptor.createFromImage(ADD_IMAGE));
+        addFilterAction.setToolTipText("Add new filter");
+        
+        deleteFilterAction = new DeleteFilterAction();
+        deleteFilterAction.setImageDescriptor(ImageDescriptor.createFromImage(DELETE_IMAGE));
+        deleteFilterAction.setToolTipText("Delete filter");
+        
+        importFilterAction = new ImportFilterAction();
+        importFilterAction.setImageDescriptor(ImageDescriptor.createFromImage(IMPORT_IMAGE));
+        importFilterAction.setToolTipText("Import filters from File");
+        
+        exportFilterAction = new ExportFilterAction();
+        exportFilterAction.setImageDescriptor(ImageDescriptor.createFromImage(EXPORT_IMAGE));
+        exportFilterAction.setToolTipText("Export filters to File");
+
+        IActionBars bars = getViewSite().getActionBars();
+        IToolBarManager manager = bars.getToolBarManager();
+        manager.add(addFilterAction);
+        manager.add(deleteFilterAction);
+        manager.add(importFilterAction);
+        manager.add(exportFilterAction);
+	}
 
 	@Override
 	public void createPartControl(Composite parent) {
 		fShell = parent.getShell();
-		
+	
 		fTabs = new CTabFolder(parent, SWT.BORDER);
 		CTabItem item1 = new CTabItem(fTabs,  SWT.BORDER);
 		item1.setText("System Jitter Graph");
@@ -398,41 +445,14 @@ public class SystemJitterView extends TmfView {
         
         createActionBar();
         
-        fjitterNode = new JitterRootNode();
-        fjitterNode.createNewJitterDiagram("UOS.Intr-Task Jitter");
+        fjitterNodes = new JitterRootNode();
+        fjitterNodes.createNewJitterDiagram("UOS.Intr-Task Jitter");
         
         TmfTraceManager traceManager = TmfTraceManager.getInstance();
         ITmfTrace trace = traceManager.getActiveTrace();
-                
         if (trace != null) {
             traceSelected(new TmfTraceSelectedSignal(this, trace));
         }
-	}
-	
-	/* Create the action bar for adding, importing, exporting filters. */
-	private void createActionBar () {
-		addFilterAction = new AddFilterAction();
-        addFilterAction.setImageDescriptor(ImageDescriptor.createFromImage(ADD_IMAGE));
-        addFilterAction.setToolTipText("Add new filter");
-        
-        deleteFilterAction = new DeleteFilterAction();
-        deleteFilterAction.setImageDescriptor(ImageDescriptor.createFromImage(DELETE_IMAGE));
-        deleteFilterAction.setToolTipText("Delete filter");
-        
-        importFilterAction = new ImportFilterAction();
-        importFilterAction.setImageDescriptor(ImageDescriptor.createFromImage(IMPORT_IMAGE));
-        importFilterAction.setToolTipText("Import filters from File");
-        
-        exportFilterAction = new ExportFilterAction();
-        exportFilterAction.setImageDescriptor(ImageDescriptor.createFromImage(EXPORT_IMAGE));
-        exportFilterAction.setToolTipText("Export filters to File");
-
-        IActionBars bars = getViewSite().getActionBars();
-        IToolBarManager manager = bars.getToolBarManager();
-        manager.add(addFilterAction);
-        manager.add(deleteFilterAction);
-        manager.add(importFilterAction);
-        manager.add(exportFilterAction);
 	}
 
 	@Override
@@ -454,11 +474,9 @@ public class SystemJitterView extends TmfView {
             return;
         }
         fCurrentTrace = signal.getTrace();
-        fjitterNode.cleanJitterEntries("UOS.Intr-Task Jitter");
+        fjitterNodes.cleanJitterDiagram("UOS.Intr-Task Jitter");
         
-
         // Create the request to get data from the trace
-
         TmfEventRequest req = new TmfEventRequest(TmfEvent.class,
                 TmfTimeRange.ETERNITY, 0, ITmfEventRequest.ALL_DATA,
                 ITmfEventRequest.ExecutionType.BACKGROUND) {
@@ -500,7 +518,7 @@ public class SystemJitterView extends TmfView {
                 			double ts = (double) data.getTimestamp().getValue();
                 			/* first occurrence of event ... */
                 			if (lastUosIntrTs != 0.0) {
-                				fjitterNode.addJitterEntry("UOS.Intr-Task Jitter", lastUosIntrTs, ts);
+                				fjitterNodes.addJitterEntry("UOS.Intr-Task Jitter", lastUosIntrTs, ts);
                 			}
                 			lastUosIntrTs = ts;
                 			timerInterruptOccurred = false; /* reset timer interrupt occurrence */
@@ -516,10 +534,10 @@ public class SystemJitterView extends TmfView {
                 lastUosIntrTs = 0.0;
                 timerInterruptOccurred = false;
                 
-                final double x[] = fjitterNode.getXValues("UOS.Intr-Task Jitter");
-                final double y[] = fjitterNode.getYValues("UOS.Intr-Task Jitter");
-                minFreq = fjitterNode.getYMin();
-                maxFreq = fjitterNode.getYMax();
+                final double x[] = fjitterNodes.getXValues("UOS.Intr-Task Jitter");
+                final double y[] = fjitterNodes.getYValues("UOS.Intr-Task Jitter");
+                minFreq = fjitterNodes.getYMin();
+                maxFreq = fjitterNodes.getYMax();
 
                 // This part needs to run on the UI thread since it updates the chart SWT control
                 Display.getDefault().asyncExec(new Runnable() {
@@ -542,7 +560,7 @@ public class SystemJitterView extends TmfView {
                         
                         fChart.redraw();
                         
-                        fIntervalTreeViewer.setInput(fjitterNode);
+                        fIntervalTreeViewer.setInput(fjitterNodes);
                     }
 
                 });

@@ -55,11 +55,16 @@ public class JitterRootNode {
 		}
 	}
 
-	public boolean addJitterEntry(String Name, double beginTs, double endTs) {
+	public boolean addJitterEntry(String Name, double beginTs, double endTs, boolean createDiagram) {
 		JitterIntervalList il = jitterDiagrams.get(Name);
+		if (il == null && createDiagram) {
+			createNewJitterDiagram(Name);
+			il = jitterDiagrams.get(Name);
+		}
 		if (il != null) {
 			il.addJitterEntry(beginTs, endTs);
-		}
+			return true;
+		} 
 		return false;
 	}
 	

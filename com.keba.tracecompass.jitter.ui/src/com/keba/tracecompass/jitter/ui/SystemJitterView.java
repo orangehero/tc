@@ -116,11 +116,13 @@ public class SystemJitterView extends TmfView {
     	public ITmfFilterTreeNode beginFilter;
     	public ITmfFilterTreeNode endFilter;
     	public String name;
+    	public double matchBeginTS;
     	
     	public IntervalFilterSetting() {
     		name = "";
     		beginFilter = null;
     		endFilter = null;
+    		matchBeginTS = 0.0;
     	}
     }
     
@@ -457,8 +459,6 @@ public class SystemJitterView extends TmfView {
         createActionBar();
         
         fjitterNodes = new JitterRootNode();
-        fjitterNodes.createNewJitterDiagram("UOS.Intr-Task Jitter");
-        fjitterNodes.createNewJitterDiagram("Timer Intr");
         
         TmfTraceManager traceManager = TmfTraceManager.getInstance();
         ITmfTrace trace = traceManager.getActiveTrace();
@@ -486,17 +486,15 @@ public class SystemJitterView extends TmfView {
             return;
         }
         fCurrentTrace = signal.getTrace();
-        fjitterNodes.cleanJitterDiagram("UOS.Intr-Task Jitter");
-        fjitterNodes.cleanJitterDiagram("Timer Intr");
+        fjitterNodes.cleanJitterEntries();
+        for (IntervalFilterSetting ival : fIntervalSettings) {
+        	ival.matchBeginTS = 0.0;
+        }
         
         // Create the request to get data from the trace
         TmfEventRequest req = new TmfEventRequest(TmfEvent.class,
                 TmfTimeRange.ETERNITY, 0, ITmfEventRequest.ALL_DATA,
                 ITmfEventRequest.ExecutionType.BACKGROUND) {
-
-        	private double lastUosIntrTs = 0.0;
-            private double lastTimerIntTs = 0.0;
-            private boolean timerInterruptOccurred = false;
 
         	
             @Override
@@ -504,36 +502,22 @@ public class SystemJitterView extends TmfView {
                 // Called for each event
                 super.handleData(data);
                 
-                if (data.getType().getName().equals("softirq_raise")) {
-                	ITmfEventField action = data.getContent().getField("action");
-                	if (action != null) {
-                		String sact = (String)action.getValue();
-                		if (sact.equals("TIMER]")) {
-                			// We just found the timer interrupt.
-                			double ts = (double) data.getTimestamp().getValue();
-                			if (lastTimerIntTs != 0.0) {
-                				fjitterNodes.addJitterEntry("Timer Intr", lastTimerIntTs, ts);
-                			}
-                			lastTimerIntTs = ts;
-                			timerInterruptOccurred = true;
+                for (IntervalFilterSetting ival : fIntervalSettings) {
+                	if (ival.beginFilter != null && ival.beginFilter.matches(data)) {
+                		double ts = (double) data.getTimestamp().getValue();
+                		if (ival.endFilter == null && ival.matchBeginTS != 0.0) {
+                				fjitterNodes.addJitterEntry(ival.name, ival.matchBeginTS, ts, true);
                 		}
+                		ival.matchBeginTS = ts;
                 	}
-                }
-                /* sched_switch to UOS.Intr-Task
-                 * only relevant if a timerinterrupt has occurred before */
-                else if (timerInterruptOccurred && data.getType().getName().equals("sched_switch")) {
-                	ITmfEventField next_comm = data.getContent().getField("next_comm");
-                	if (next_comm != null) {
-                		String spc = (String)next_comm.getValue();
-                		if (spc.equals("UOS.Intr-Task")) {
-                			double ts = (double) data.getTimestamp().getValue();
-                			/* first occurrence of event ... */
-                			if (lastUosIntrTs != 0.0) {
-                				fjitterNodes.addJitterEntry("UOS.Intr-Task Jitter", lastUosIntrTs, ts);
-                			}
-                			lastUosIntrTs = ts;
-                			timerInterruptOccurred = false; /* reset timer interrupt occurrence */
+                	if (ival.endFilter != null && ival.endFilter.matches(data)) {
+                		// add to fjitterNodes
+                		double ts = (double) data.getTimestamp().getValue();
+                		/* Record only if a beginFilter was matched */
+                		if (ival.matchBeginTS != 0.0) {
+                			fjitterNodes.addJitterEntry(ival.name, ival.matchBeginTS, ts, false);
                 		}
+                		ival.matchBeginTS = 0.0;
                 	}
                 }
             }
@@ -542,8 +526,6 @@ public class SystemJitterView extends TmfView {
             public void handleSuccess() {
                 // Request successful, not more data available
                 super.handleSuccess();
-                lastUosIntrTs = 0.0;
-                timerInterruptOccurred = false;
 
                 // This part needs to run on the UI thread since it updates the chart SWT control
                 Display.getDefault().asyncExec(new Runnable() {
@@ -600,8 +582,6 @@ public class SystemJitterView extends TmfView {
             public void handleFailure() {
                 // Request failed, not more data available
                 super.handleFailure();
-                lastUosIntrTs = 0.0;
-                timerInterruptOccurred = false;
             }
         };
         ITmfTrace trace = signal.getTrace();

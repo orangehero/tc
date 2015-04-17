@@ -1,3 +1,15 @@
+/*******************************************************************************
+ * Copyright (c) 2015 
+ *
+ * All rights reserved. This program and the accompanying materials are
+ * made available under the terms of the Eclipse Public License v1.0 which
+ * accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v10.html
+ *
+ * Contributors:
+ *   orangehero - Initial API and implementation
+ *******************************************************************************/
+
 package com.keba.tracecompass.jitter.ui;
 
 import java.text.FieldPosition;
@@ -64,6 +76,7 @@ import org.eclipse.tracecompass.tmf.ui.views.filter.FilterDialog;
 import org.eclipse.ui.IActionBars;
 import org.eclipse.ui.plugin.AbstractUIPlugin;
 import org.swtchart.Chart;
+import org.swtchart.ISeries;
 import org.swtchart.ISeries.SeriesType;
 import org.swtchart.Range;
 
@@ -77,7 +90,6 @@ public class SystemJitterView extends TmfView {
 	private static final Image EXPORT_IMAGE = AbstractUIPlugin.imageDescriptorFromPlugin(PLUGIN_ID, "/icons/export_button.gif").createImage();
 	private static final Image IMPORT_IMAGE = AbstractUIPlugin.imageDescriptorFromPlugin(PLUGIN_ID, "/icons/import_button.gif").createImage();
 	
-    private static final String SERIES_NAME = "Series";
     private static final String Y_AXIS_TITLE = "Frequency";
     private static final String X_AXIS_TITLE = "Jitter";
     private static final int TAB_INTERVAL_INDEX = 1;
@@ -431,7 +443,6 @@ public class SystemJitterView extends TmfView {
         fChart.getAxisSet().getXAxis(0).getTitle().setText(X_AXIS_TITLE);
         fChart.getAxisSet().getYAxis(0).getTitle().setText(Y_AXIS_TITLE);
         fChart.getAxisSet().getXAxis(0).getTick().setFormat(new TmfChartTimeStampFormat());
-        fChart.getSeriesSet().createSeries(SeriesType.LINE, SERIES_NAME);
         fChart.getLegend().setVisible(false);
         
         createIntervalTreeViewer();
@@ -447,6 +458,7 @@ public class SystemJitterView extends TmfView {
         
         fjitterNodes = new JitterRootNode();
         fjitterNodes.createNewJitterDiagram("UOS.Intr-Task Jitter");
+        fjitterNodes.createNewJitterDiagram("Timer Intr");
         
         TmfTraceManager traceManager = TmfTraceManager.getInstance();
         ITmfTrace trace = traceManager.getActiveTrace();
@@ -475,6 +487,7 @@ public class SystemJitterView extends TmfView {
         }
         fCurrentTrace = signal.getTrace();
         fjitterNodes.cleanJitterDiagram("UOS.Intr-Task Jitter");
+        fjitterNodes.cleanJitterDiagram("Timer Intr");
         
         // Create the request to get data from the trace
         TmfEventRequest req = new TmfEventRequest(TmfEvent.class,
@@ -483,8 +496,6 @@ public class SystemJitterView extends TmfView {
 
         	private double lastUosIntrTs = 0.0;
             private double lastTimerIntTs = 0.0;
-            private double minFreq   = Double.MAX_VALUE;
-            private double maxFreq   = -Double.MAX_VALUE;
             private boolean timerInterruptOccurred = false;
 
         	
@@ -501,7 +512,7 @@ public class SystemJitterView extends TmfView {
                 			// We just found the timer interrupt.
                 			double ts = (double) data.getTimestamp().getValue();
                 			if (lastTimerIntTs != 0.0) {
-                				// do something statistical
+                				fjitterNodes.addJitterEntry("Timer Intr", lastTimerIntTs, ts);
                 			}
                 			lastTimerIntTs = ts;
                 			timerInterruptOccurred = true;
@@ -533,25 +544,44 @@ public class SystemJitterView extends TmfView {
                 super.handleSuccess();
                 lastUosIntrTs = 0.0;
                 timerInterruptOccurred = false;
-                
-                final double x[] = fjitterNodes.getXValues("UOS.Intr-Task Jitter");
-                final double y[] = fjitterNodes.getYValues("UOS.Intr-Task Jitter");
-                minFreq = fjitterNodes.getYMin();
-                maxFreq = fjitterNodes.getYMax();
 
                 // This part needs to run on the UI thread since it updates the chart SWT control
                 Display.getDefault().asyncExec(new Runnable() {
 
                     @Override
                     public void run() {
+                    	Object [] keys = fjitterNodes.getKeyNodes();
+                    	double xAxisRangeMax = Double.MAX_VALUE;
+                    	
+                    	for (ISeries s : fChart.getSeriesSet().getSeries()) {
+                    		fChart.getSeriesSet().deleteSeries(s.getId());
+                    	}
 
-                        fChart.getSeriesSet().getSeries()[0].setXSeries(x);
-                        fChart.getSeriesSet().getSeries()[0].setYSeries(y);
-
-                        // Set the new range
-                        if (x.length>0 && y.length>0) {
-                            fChart.getAxisSet().getXAxis(0).setRange(new Range(0, x[x.length - 1]));
-                            fChart.getAxisSet().getYAxis(0).setRange(new Range(minFreq, maxFreq));
+                    	for (int idx = 0; idx < keys.length; idx++) {
+                    		final double x[] = fjitterNodes.getXValues(keys[idx].toString());
+                            final double y[] = fjitterNodes.getYValues(keys[idx].toString());
+                            
+                            if (x.length == 0 || y.length == 0) {
+                            	continue;
+                            }
+                            
+                            xAxisRangeMax = Math.min(xAxisRangeMax, x[x.length - 1]);
+                            
+                            fChart.getSeriesSet().createSeries(SeriesType.LINE, keys[idx].toString());
+	                        fChart.getSeriesSet().getSeries()[idx].setXSeries(x);
+	                        fChart.getSeriesSet().getSeries()[idx].setYSeries(y);
+                    	}
+                    	// Set the new range
+                        if (xAxisRangeMax != Double.MAX_VALUE) {
+                            fChart.getAxisSet().getXAxis(0).setRange(new Range(0, xAxisRangeMax));
+							fChart.getAxisSet()
+									.getYAxis(0)
+									.setRange(
+											new Range(
+													fjitterNodes.getYMin(keys[0]
+															.toString()),
+													fjitterNodes.getYMax(keys[0]
+															.toString())));
                         } else {
                             fChart.getAxisSet().getXAxis(0).setRange(new Range(0, 1));
                             fChart.getAxisSet().getYAxis(0).setRange(new Range(0, 1));

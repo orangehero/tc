@@ -18,6 +18,7 @@ import org.eclipse.jface.viewers.CellLabelProvider;
 import org.eclipse.jface.viewers.ILabelProvider;
 import org.eclipse.jface.viewers.ViewerCell;
 import org.eclipse.swt.graphics.Image;
+import org.eclipse.tracecompass.tmf.core.timestamp.ITmfTimestamp;
 
 public class SystemJitterColumnLabelProvider extends CellLabelProvider implements ILabelProvider {
 
@@ -35,8 +36,7 @@ public class SystemJitterColumnLabelProvider extends CellLabelProvider implement
 
 	@Override
 	public String getText(Object element) {
-		if (element instanceof TreeMap<?,?>) return "Jitter UOS.Intr-Task";
-		else if (element instanceof Double) return element.toString();
+		if (element instanceof ITmfTimestamp) return element.toString();
 		else if (element instanceof Integer) return element.toString();
 		return "unknown";
 	}

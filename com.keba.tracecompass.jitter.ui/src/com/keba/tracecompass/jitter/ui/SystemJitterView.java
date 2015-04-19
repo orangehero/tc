@@ -116,13 +116,13 @@ public class SystemJitterView extends TmfView {
     	public ITmfFilterTreeNode beginFilter;
     	public ITmfFilterTreeNode endFilter;
     	public String name;
-    	public double matchBeginTS;
+    	public ITmfTimestamp matchBeginTS;
     	
     	public IntervalFilterSetting() {
     		name = "";
     		beginFilter = null;
     		endFilter = null;
-    		matchBeginTS = 0.0;
+    		matchBeginTS = null;
     	}
     }
     
@@ -252,9 +252,7 @@ public class SystemJitterView extends TmfView {
 				Object o = sel.getFirstElement();
 				if (o instanceof JitterIntervalNode) {
 					JitterIntervalNode jin = (JitterIntervalNode)o;
-					TmfTimestamp beginTs = new TmfTimestamp((long) jin.getStartTs(), ITmfTimestamp.NANOSECOND_SCALE);
-			        TmfTimestamp endTs = new TmfTimestamp((long) jin.getEndTs(), ITmfTimestamp.NANOSECOND_SCALE);
-			        TmfSelectionRangeUpdatedSignal signal = new TmfSelectionRangeUpdatedSignal(this, beginTs, endTs);
+			        TmfSelectionRangeUpdatedSignal signal = new TmfSelectionRangeUpdatedSignal(this, jin.getStartTs(), jin.getEndTs());
 			        fThrottler.queue(signal);
 				}
 			}
@@ -284,8 +282,7 @@ public class SystemJitterView extends TmfView {
         	@Override
         	public String getText(Object element) {
         		if (element instanceof JitterIntervalNode) {
-        			double sts = ((JitterIntervalNode)element).getStartTs();
-        			return Double.toString(sts);
+        			return ((JitterIntervalNode)element).getStartTs().toString();
         		}
         		return "";
         	}
@@ -299,8 +296,7 @@ public class SystemJitterView extends TmfView {
         	@Override
         	public String getText(Object element) {
         		if (element instanceof JitterIntervalNode) {
-        			double ets = ((JitterIntervalNode)element).getEndTs();
-        			return Double.toString(ets);
+        			return ((JitterIntervalNode)element).getEndTs().toString();
         		}
         		return "";
         	}
@@ -488,7 +484,7 @@ public class SystemJitterView extends TmfView {
         fCurrentTrace = signal.getTrace();
         fjitterNodes.cleanJitterEntries();
         for (IntervalFilterSetting ival : fIntervalSettings) {
-        	ival.matchBeginTS = 0.0;
+        	ival.matchBeginTS = null;
         }
         
         // Create the request to get data from the trace
@@ -499,25 +495,24 @@ public class SystemJitterView extends TmfView {
         	
             @Override
             public void handleData(ITmfEvent data) {
-                // Called for each event
                 super.handleData(data);
                 
                 for (IntervalFilterSetting ival : fIntervalSettings) {
                 	if (ival.beginFilter != null && ival.beginFilter.matches(data)) {
-                		double ts = (double) data.getTimestamp().getValue();
-                		if (ival.endFilter == null && ival.matchBeginTS != 0.0) {
+                		ITmfTimestamp ts = data.getTimestamp();
+                		if (ival.endFilter == null && ival.matchBeginTS != null) {
                 				fjitterNodes.addJitterEntry(ival.name, ival.matchBeginTS, ts, true);
                 		}
                 		ival.matchBeginTS = ts;
                 	}
                 	if (ival.endFilter != null && ival.endFilter.matches(data)) {
                 		// add to fjitterNodes
-                		double ts = (double) data.getTimestamp().getValue();
+                		ITmfTimestamp ts = data.getTimestamp();
                 		/* Record only if a beginFilter was matched */
-                		if (ival.matchBeginTS != 0.0) {
+                		if (ival.matchBeginTS != null) {
                 			fjitterNodes.addJitterEntry(ival.name, ival.matchBeginTS, ts, false);
                 		}
-                		ival.matchBeginTS = 0.0;
+                		ival.matchBeginTS = null;
                 	}
                 }
             }
@@ -554,7 +549,7 @@ public class SystemJitterView extends TmfView {
 	                        fChart.getSeriesSet().getSeries()[idx].setYSeries(y);
                     	}
                     	// Set the new range
-                        if (xAxisRangeMax != Double.MAX_VALUE) {
+                        if (xAxisRangeMax  != Double.MAX_VALUE && xAxisRangeMax > 0) {
                             fChart.getAxisSet().getXAxis(0).setRange(new Range(0, xAxisRangeMax));
 							fChart.getAxisSet()
 									.getYAxis(0)

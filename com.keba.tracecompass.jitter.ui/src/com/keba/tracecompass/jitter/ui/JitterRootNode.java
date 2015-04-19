@@ -14,6 +14,8 @@ package com.keba.tracecompass.jitter.ui;
 
 import java.util.HashMap;
 
+import org.eclipse.tracecompass.tmf.core.timestamp.ITmfTimestamp;
+
 public class JitterRootNode {
 	
 	private class MinMaxStruct {
@@ -55,7 +57,7 @@ public class JitterRootNode {
 		}
 	}
 
-	public boolean addJitterEntry(String Name, double beginTs, double endTs, boolean createDiagram) {
+	public boolean addJitterEntry(String Name, ITmfTimestamp beginTs, ITmfTimestamp endTs, boolean createDiagram) {
 		JitterIntervalList il = jitterDiagrams.get(Name);
 		if (il == null && createDiagram) {
 			createNewJitterDiagram(Name);
@@ -74,14 +76,19 @@ public class JitterRootNode {
         	if (list[i] instanceof Integer) {
         		int val = (int) list[i];
         		d[i] = val;
-        	} else if (list[i] instanceof Double) {
-        		d[i] = (double) list[i];
+        	} else if (list[i] instanceof Long) {
+        		d[i] = (long) list[i];
         	}
         }
 
         return d;
     }
 	
+	/**
+	 * Values of y-Axis shown in chart
+	 * @param Name Interval name.
+	 * @return double values to be displayed in swtchart
+	 */
 	public double [] getYValues (String Name) {
 		JitterIntervalList il = jitterDiagrams.get(Name);
 		MinMaxStruct mms = jitterDiagramsMinMax.get(Name);
@@ -90,7 +97,7 @@ public class JitterRootNode {
 			double[] d = new double[freqList.length];
 			
 			for (int i = 0; i < freqList.length; ++i) {
-				double jitter = (Double)freqList[i];
+				long jitter = (Long)freqList[i];
 				d[i] = il.getFrequency(jitter);
 				mms.minY = Math.min(mms.minY, d[i]);
 				mms.maxY = Math.max(mms.maxY, d[i]);
@@ -100,6 +107,11 @@ public class JitterRootNode {
 		return null;
 	}
 	
+	/**
+	 * Values of x-Axis shown in chart
+	 * @param Name Interval name.
+	 * @return double values to be displayed in swtchart
+	 */
 	public double [] getXValues (String Name) {
 		JitterIntervalList il = jitterDiagrams.get(Name);
 		if (il != null) {

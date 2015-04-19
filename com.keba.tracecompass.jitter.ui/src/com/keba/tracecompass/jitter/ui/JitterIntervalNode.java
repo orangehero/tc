@@ -12,26 +12,28 @@
 
 package com.keba.tracecompass.jitter.ui;
 
+import org.eclipse.tracecompass.tmf.core.timestamp.ITmfTimestamp;
+
 public class JitterIntervalNode {
 	
-	private double startTs;
-	private double endTs;
+	private ITmfTimestamp startTs;
+	private ITmfTimestamp endTs;
 	
-	JitterIntervalNode (double sts, double ets) {
+	JitterIntervalNode (ITmfTimestamp sts, ITmfTimestamp ets) {
 		startTs = sts;
 		endTs = ets;
 	}
 	
-	public double getStartTs() {
+	public ITmfTimestamp getStartTs() {
 		return startTs;
 	}
 	
-	public double getEndTs() {
+	public ITmfTimestamp getEndTs() {
 		return endTs;
 	}
 	
-	public double getJitterInterval () {
-	   return endTs - startTs;
+	public ITmfTimestamp getJitterInterval () {
+	   return endTs.getDelta(startTs);
 	}
 	
 }

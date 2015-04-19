@@ -14,13 +14,15 @@ package com.keba.tracecompass.jitter.ui;
 
 import java.util.TreeMap;
 
+import org.eclipse.tracecompass.tmf.core.timestamp.ITmfTimestamp;
+
 public class JitterIntervalList {
 
-	private TreeMap<Double, JitterIntervalNodeList> jitterFreq;
+	private TreeMap<Long, JitterIntervalNodeList> jitterFreq;
 	private String Name;
 	
 	public JitterIntervalList(String n) {
-		jitterFreq = new TreeMap<Double, JitterIntervalNodeList>();
+		jitterFreq = new TreeMap<Long, JitterIntervalNodeList>();
 		Name = n;
 	}
 	
@@ -32,8 +34,8 @@ public class JitterIntervalList {
 		jitterFreq.clear();
 	}
 	
-	public void addJitterEntry (double beginTs, double endTs) {
-		double jitter = endTs - beginTs;
+	public void addJitterEntry (ITmfTimestamp beginTs, ITmfTimestamp endTs) {
+		long jitter = endTs.getDelta(beginTs).getValue();
 		JitterIntervalNodeList il = jitterFreq.get(jitter);
 		
 		/* Add new list in case it didn't already exist */
@@ -45,7 +47,7 @@ public class JitterIntervalList {
 		il.addIntervalNode(new JitterIntervalNode(beginTs, endTs));
 	}
 	
-	public int getFrequency(double jitter) {
+	public int getFrequency(long jitter) {
 		int freq = 0;
 		JitterIntervalNodeList il = jitterFreq.get(jitter);
 		

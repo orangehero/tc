@@ -12,8 +12,6 @@
 
 package com.keba.tracecompass.jitter.ui;
 
-import java.util.TreeMap;
-
 import org.eclipse.jface.viewers.CellLabelProvider;
 import org.eclipse.jface.viewers.ILabelProvider;
 import org.eclipse.jface.viewers.ViewerCell;
@@ -24,8 +22,6 @@ public class SystemJitterColumnLabelProvider extends CellLabelProvider implement
 
 	@Override
 	public void update(ViewerCell cell) {
-		// TODO Auto-generated method stub
-
 	}
 
 	@Override

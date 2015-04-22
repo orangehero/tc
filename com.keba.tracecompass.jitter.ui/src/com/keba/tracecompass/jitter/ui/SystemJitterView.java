@@ -51,13 +51,12 @@ import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Event;
+import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.TableItem;
 import org.eclipse.tracecompass.tmf.core.event.ITmfEvent;
-import org.eclipse.tracecompass.tmf.core.event.ITmfEventField;
 import org.eclipse.tracecompass.tmf.core.event.TmfEvent;
-import org.eclipse.tracecompass.tmf.core.filter.model.ITmfFilterTreeNode;
 import org.eclipse.tracecompass.tmf.core.request.ITmfEventRequest;
 import org.eclipse.tracecompass.tmf.core.request.TmfEventRequest;
 import org.eclipse.tracecompass.tmf.core.signal.TmfSelectionRangeUpdatedSignal;
@@ -68,7 +67,6 @@ import org.eclipse.tracecompass.tmf.core.signal.TmfTraceClosedSignal;
 import org.eclipse.tracecompass.tmf.core.signal.TmfTraceSelectedSignal;
 import org.eclipse.tracecompass.tmf.core.timestamp.ITmfTimestamp;
 import org.eclipse.tracecompass.tmf.core.timestamp.TmfTimeRange;
-import org.eclipse.tracecompass.tmf.core.timestamp.TmfTimestamp;
 import org.eclipse.tracecompass.tmf.core.trace.ITmfTrace;
 import org.eclipse.tracecompass.tmf.core.trace.TmfTraceManager;
 import org.eclipse.tracecompass.tmf.ui.views.TmfView;
@@ -110,21 +108,6 @@ public class SystemJitterView extends TmfView {
     private Action exportFilterAction;
     
     private List<IntervalFilterSetting> fIntervalSettings;
-	
-    private class IntervalFilterSetting {
-    	
-    	public ITmfFilterTreeNode beginFilter;
-    	public ITmfFilterTreeNode endFilter;
-    	public String name;
-    	public ITmfTimestamp matchBeginTS;
-    	
-    	public IntervalFilterSetting() {
-    		name = "";
-    		beginFilter = null;
-    		endFilter = null;
-    		matchBeginTS = null;
-    	}
-    }
     
     private class TmfChartTimeStampFormat extends SimpleDateFormat {
         private static final long serialVersionUID = 1L;
@@ -177,14 +160,30 @@ public class SystemJitterView extends TmfView {
     private class ImportFilterAction extends Action {
     	@Override
     	public void run() {
-    		
+    		FileDialog fileDialog = new FileDialog(fShell, SWT.OPEN);
+            fileDialog.setFilterExtensions(new String[] {"*.xml"}); //$NON-NLS-1$
+            String pathName = fileDialog.open();
+            if (pathName != null) {
+            	 IntervalFilterSetting[] ivalSettings = IntervalFilterXML.load(pathName);
+            	 fIntervalSettings.clear();
+            	 for (IntervalFilterSetting e : ivalSettings) {
+            		 fIntervalSettings.add(e);
+            	 }
+            	 fIntervalFilterTableViewer.setInput(fIntervalSettings.toArray());
+            }
     	}
     };
     
     private class ExportFilterAction extends Action {
     	@Override
     	public void run() {
-    		
+    		FileDialog fileDialog = new FileDialog(fShell, SWT.SAVE);
+            fileDialog.setFilterExtensions(new String[] {"*.xml"}); //$NON-NLS-1$
+            fileDialog.setOverwrite(true);
+            String pathName = fileDialog.open();
+            if (pathName != null) {
+            	IntervalFilterXML.save(pathName, fIntervalSettings.toArray(new IntervalFilterSetting[0]));//fColorSettings.toArray(new ColorSetting[0]));
+            }
     	}
     };
     

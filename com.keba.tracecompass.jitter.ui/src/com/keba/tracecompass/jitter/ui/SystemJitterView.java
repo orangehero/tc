@@ -64,6 +64,7 @@ import org.eclipse.tracecompass.tmf.core.signal.TmfSignalHandler;
 import org.eclipse.tracecompass.tmf.core.signal.TmfSignalThrottler;
 import org.eclipse.tracecompass.tmf.core.signal.TmfTimestampFormatUpdateSignal;
 import org.eclipse.tracecompass.tmf.core.signal.TmfTraceClosedSignal;
+import org.eclipse.tracecompass.tmf.core.signal.TmfTraceOpenedSignal;
 import org.eclipse.tracecompass.tmf.core.signal.TmfTraceSelectedSignal;
 import org.eclipse.tracecompass.tmf.core.timestamp.ITmfTimestamp;
 import org.eclipse.tracecompass.tmf.core.timestamp.TmfTimeRange;
@@ -475,12 +476,42 @@ public class SystemJitterView extends TmfView {
     }
 	
     @TmfSignalHandler
+    public void traceOpened(final TmfTraceOpenedSignal signal) {
+        System.out.println("XXX Update Trace upon traceOpened!");
+        setSelectedTrace(signal.getTrace());
+    }
+    
+    @TmfSignalHandler
     public void traceSelected(final TmfTraceSelectedSignal signal) {
-        // Don't populate the view again if we're already showing this trace
-        if (fCurrentTrace == signal.getTrace()) {
+    	System.out.println("XXX Update Trace upon traceSelected!");
+    	setSelectedTrace(signal.getTrace());
+    }
+    
+    @TmfSignalHandler
+    public void traceClosed(final TmfTraceClosedSignal signal) {
+    	Display.getDefault().asyncExec(new Runnable() {
+            @Override
+            public void run() {
+            	if (fIntervalTreeViewer.getControl().isDisposed()) {
+            		return;
+            	}
+            	
+            	fIntervalTreeViewer.setInput(null);
+            	
+            	fChart.getSeriesSet().getSeries()[0].setXSeries(new double[0]);
+                fChart.getSeriesSet().getSeries()[0].setYSeries(new double[0]);
+                fChart.redraw();
+            }
+    	});
+    }
+    
+    private void setSelectedTrace(ITmfTrace trace) {
+    	// Don't populate the view again if we're already showing this trace
+        if (fCurrentTrace == trace) {
+        	System.out.println("XXX Trace already selected!");
             return;
         }
-        fCurrentTrace = signal.getTrace();
+        fCurrentTrace = trace;
         fjitterNodes.cleanJitterEntries();
         for (IntervalFilterSetting ival : fIntervalSettings) {
         	ival.matchBeginTS = null;
@@ -578,26 +609,7 @@ public class SystemJitterView extends TmfView {
                 super.handleFailure();
             }
         };
-        ITmfTrace trace = signal.getTrace();
         trace.sendRequest(req);
-    }
-    
-    @TmfSignalHandler
-    public void traceClosed(final TmfTraceClosedSignal signal) {
-    	Display.getDefault().asyncExec(new Runnable() {
-            @Override
-            public void run() {
-            	if (fIntervalTreeViewer.getControl().isDisposed()) {
-            		return;
-            	}
-            	
-            	fIntervalTreeViewer.setInput(null);
-            	
-            	fChart.getSeriesSet().getSeries()[0].setXSeries(new double[0]);
-                fChart.getSeriesSet().getSeries()[0].setYSeries(new double[0]);
-                fChart.redraw();
-            }
-    	});
     }
 
 }

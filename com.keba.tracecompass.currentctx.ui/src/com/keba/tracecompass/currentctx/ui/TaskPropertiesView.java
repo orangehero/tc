@@ -23,7 +23,7 @@ import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.tracecompass.analysis.os.linux.core.kernelanalysis.Attributes;
-import org.eclipse.tracecompass.analysis.os.linux.core.kernelanalysis.KernelAnalysis;
+import org.eclipse.tracecompass.analysis.os.linux.core.kernelanalysis.KernelAnalysisModule;
 import org.eclipse.tracecompass.analysis.os.linux.core.kernelanalysis.KernelThreadInformationProvider;
 import org.eclipse.tracecompass.statesystem.core.ITmfStateSystem;
 import org.eclipse.tracecompass.statesystem.core.exceptions.AttributeNotFoundException;
@@ -182,9 +182,9 @@ public class TaskPropertiesView extends TmfView {
 		for (ITmfTrace trace : TmfTraceManager.getTraceSet(currentTrace)) {
 
 			Integer eventCpu = null;
-			KernelAnalysis kernelAnalysis = TmfTraceUtils
-					.getAnalysisModuleOfClass(trace, KernelAnalysis.class,
-							KernelAnalysis.ID);
+			KernelAnalysisModule kernelAnalysis = TmfTraceUtils
+					.getAnalysisModuleOfClass(trace, KernelAnalysisModule.class,
+							KernelAnalysisModule.ID);
 			if (kernelAnalysis == null)
 				continue;
 

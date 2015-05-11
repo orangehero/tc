@@ -102,6 +102,9 @@ public class JitterRootNode {
 				mms.minY = Math.min(mms.minY, d[i]);
 				mms.maxY = Math.max(mms.maxY, d[i]);
 			}
+			if (mms.minY == mms.maxY) {
+				mms.maxY += 1.0;
+			}
 			return d;
 		}
 		return null;
